@@ -54,7 +54,7 @@ def describe_error(e: BaseException) -> str:
         wait = re.search(r"try again in ([\w.]+)", text)
         scope = "per day" if "per day" in text else "per minute"
         return (f"The model provider's free-tier limit ({scope}) is used up. "
-                f"Try again in {wait.group(1) if wait else 'a while'}, then press Retry last step.\n\n{text}")
+                f"Try again in {wait.group(1).rstrip('.') if wait else 'a while'}, then press Retry last step.\n\n{text}")
     return f"{type(e).__name__}: {text}"
 
 
