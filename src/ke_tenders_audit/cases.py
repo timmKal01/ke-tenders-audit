@@ -97,6 +97,8 @@ def draft_report(case_id: str, title: str, summary: str, approved_by: str,
         raise CaseError("No approved flags in this case yet. File flags before drafting the report.")
     if DECISION_WORDS.search(summary or ""):
         raise CaseError("The summary must not decide the award or declare wrongdoing.")
+    if not (summary or "").rstrip().endswith((".", "!", "?", ")")):
+        raise CaseError("The summary looks cut off: it does not end with a full stop. Rewrite it as complete sentences.")
 
     lines = [
         f"# {plain_text(title)}",
@@ -144,6 +146,9 @@ def draft_report(case_id: str, title: str, summary: str, approved_by: str,
             for pattern, n in sorted(counts.items()):
                 lines.append(f"| {t['buyer']} | {t['awards_checked']} | {pattern.replace('_', ' ')} | {n} | "
                              f"{filed.get(pattern, 0)} |")
+            for pattern, n in sorted(filed.items()):
+                if pattern not in counts:  # e.g. price outliers come from price_benchmark, not the integrity check
+                    lines.append(f"| {t['buyer']} | | {pattern.replace('_', ' ')} (other checks) | n/a | {n} |")
             lines.append(f"| {t['buyer']} | | data problems (not flags) | {t['data_problems']} | |")
         lines += ["", "Patterns found but not filed were judged less important by the agent. "
                       "The committee can ask for any of them.", ""]

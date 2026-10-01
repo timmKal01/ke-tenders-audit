@@ -145,3 +145,24 @@ def test_report_carries_totals_computed_from_data():
     assert "| repeat winner same buyer | 4 | 0 |" in text
     assert "| signed before close | 1 | 0 |" in text
     assert "| single bidder | 8 | 1 |" in text
+
+
+def test_cut_off_summary_is_refused():
+    """Dev run: the model's summary ended mid-sentence with 'so neither'."""
+    from ke_tenders_audit import server
+    case_id = f"test-{uuid.uuid4().hex[:8]}"
+    server.file_flag(case_id, "ocds-5whusi-302526-PCKTTI-172", "single_bidder",
+                     "One bidder.", "IMOTH INSURANCE was the only bidder.", "Jane Wanjiku")
+    out = json.loads(server.draft_report(case_id, "Review", "The insurance award has no comparables, so neither",
+                                         "Jane Wanjiku"))
+    assert out["status"] == "refused" and "cut off" in out["reason"]
+
+
+def test_price_outlier_gets_its_own_row():
+    from ke_tenders_audit import server
+    case_id = f"test-{uuid.uuid4().hex[:8]}"
+    server.file_flag(case_id, "ocds-5whusi-302523-PCKTTI-112", "price_outlier", "Far above similar awards.",
+                     "CAGE DYNAMICS KES 2,898,800, 7.14 times the median.", "Jane Wanjiku")
+    server.draft_report(case_id, "Review", "One price outlier.", "Jane Wanjiku")
+    text = (cases.CASES_DIR / case_id / "report.md").read_text(encoding="utf-8")
+    assert "| price outlier (other checks) | n/a | 1 |" in text
