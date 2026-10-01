@@ -99,3 +99,24 @@ def test_em_dashes_are_removed():
                            {KILIFI_OCID})
     assert "—" not in flag["finding"]
     assert json.loads((cases.CASES_DIR / case_id / "flags.json").read_text(encoding="utf-8"))[0]["flag_id"] == "F001"
+
+
+def test_flag_naming_the_wrong_supplier_is_refused():
+    """Dev run: the model said MATSON won a tender that SALGAD won."""
+    from ke_tenders_audit import server
+    out = json.loads(server.file_flag(
+        "test-wrong-supplier", "ocds-5whusi-302433-PCKTTI-163", "single_bidder",
+        "The hardware award had one bidder.", "MATSON GENERAL ENTERPRISES is the sole listed bidder.",
+        "Jane Wanjiku"))
+    assert out["status"] == "refused"
+    assert "SALGAD INVESTMENT LIMITED" in out["reason"]
+
+
+def test_flag_naming_the_right_supplier_carries_record_facts():
+    from ke_tenders_audit import server
+    out = json.loads(server.file_flag(
+        f"test-{uuid.uuid4().hex[:8]}", "ocds-5whusi-302433-PCKTTI-163", "single_bidder",
+        "The hardware award had one bidder.", "SALGAD INVESTMENT LIMITED is the sole listed bidder.",
+        "Jane Wanjiku"))
+    assert out["status"] == "filed"
+    assert out["record"]["bidders"] == 1 and out["record"]["winners"] == ["SALGAD INVESTMENT LIMITED"]

@@ -176,6 +176,27 @@ def supplier_profile(con, name: str) -> dict:
     }
 
 
+def record_facts(con, ocid: str) -> dict:
+    """The facts a flag must agree with: winners, amounts, bidders, method, buyer."""
+    awards = _rows(con, "SELECT supplier_name, supplier_key, amount FROM awards WHERE ocid = ?", [ocid])
+    tender = _rows(con, "SELECT buyer_name, method, left(title, 80) AS title FROM tenders WHERE ocid = ?", [ocid])
+    bidders = _rows(con, "SELECT name, supplier_key FROM bidders WHERE ocid = ?", [ocid])
+    t = tender[0] if tender else {}
+    return {
+        "buyer": t.get("buyer_name"), "title": t.get("title"), "method": t.get("method"),
+        "winners": [a["supplier_name"] for a in awards], "amounts_kes": [a["amount"] for a in awards],
+        "bidders": len(bidders),
+        "_keys": {a["supplier_key"] for a in awards if a["supplier_key"]} | {b["supplier_key"] for b in bidders},
+    }
+
+
+def suppliers_mentioned(con, text: str) -> set[str]:
+    """Known supplier companies whose distinctive name appears in the text."""
+    normalised = f" {supplier_key(text)} "
+    keys = {r[0] for r in con.execute("SELECT DISTINCT supplier_key FROM bidders WHERE supplier_key <> ''").fetchall()}
+    return {k for k in keys if len(core_name(k)) >= 5 and f" {core_name(k)} " in normalised}
+
+
 def check_red_flags(con, ocid=None, buyer=None) -> dict:
     if not ocid and not buyer:
         return {"error": "Give an ocid or a buyer name to limit the scope."}

@@ -52,7 +52,7 @@ def load_flags(case_id: str) -> list[dict]:
 
 
 def file_flag(case_id: str, ocid: str, flag_type: str, finding: str, evidence: str,
-              approved_by: str, known_ocids: set[str]) -> dict:
+              approved_by: str, known_ocids: set[str], record: dict | None = None) -> dict:
     approver = _check_approver(approved_by)
     if ocid not in known_ocids:
         raise CaseError(f"ocid '{ocid}' is not in the data. Every flag must cite a real record.")
@@ -72,6 +72,7 @@ def file_flag(case_id: str, ocid: str, flag_type: str, finding: str, evidence: s
         "flag_type": flag_type,
         "finding": plain_text(finding),
         "evidence": plain_text(evidence),
+        "record": record or {},
         "approved_by": approver,
         "filed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
@@ -80,6 +81,12 @@ def file_flag(case_id: str, ocid: str, flag_type: str, finding: str, evidence: s
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "flags.json").write_text(json.dumps(flags, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"status": "filed", "case_id": case_id, **flag}
+
+
+def _record_line(r: dict) -> str:
+    amounts = ", ".join(f"KES {a:,.2f}" if a else "KES 0 (data gap)" for a in r.get("amounts_kes", []))
+    return (f"buyer {r.get('buyer')}; method {r.get('method')}; winner(s) {', '.join(r.get('winners') or ['none'])}; "
+            f"amount(s) {amounts or 'none'}; bidders listed {r.get('bidders')}")
 
 
 def draft_report(case_id: str, title: str, summary: str, approved_by: str) -> dict:
@@ -114,6 +121,7 @@ def draft_report(case_id: str, title: str, summary: str, approved_by: str) -> di
             f"- **Finding:** {f['finding']}",
             f"- **Evidence:** {f['evidence']}",
             f"- **Source:** OCDS record `{f['ocid']}` (PPRA, tenders.go.ke)",
+            *([f"- **Record says:** {_record_line(f['record'])}"] if f.get("record") else []),
             f"- **Approved by:** {f['approved_by']} on {f['filed_at']}",
             "",
         ]
