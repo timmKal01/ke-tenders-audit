@@ -247,15 +247,43 @@ def check_red_flags(con, ocid=None, buyer=None) -> dict:
 
     issues = _rows(con, f"""SELECT d.ocid, d.issue, d.detail FROM data_issues d JOIN tenders t USING (ocid)
                             WHERE {scope_sql}""", params)
+    counts: dict[str, int] = {}
+    for f in flags:
+        counts[f["flag_type"]] = counts.get(f["flag_type"], 0) + 1
     return {
         "scope": ocid or buyer,
         "awards_checked": len(awards),
-        "flags": flags[:15],
+        "flag_counts": counts,  # first, so a shortened copy of this result still carries the totals
+        "flags": _interleave(flags)[:15],
         "flags_total": len(flags),
         "data_problems_total": len(issues),
         "data_problems": issues[:5],
         "note": "Flags are patterns for a human to review, not findings of wrongdoing.",
     }
+
+
+def _interleave(flags: list[dict]) -> list[dict]:
+    """Alternate flag types, so a capped or shortened list still shows every kind."""
+    by_type: dict[str, list[dict]] = {}
+    for f in flags:
+        by_type.setdefault(f["flag_type"], []).append(f)
+    out = []
+    while any(by_type.values()):
+        for group in by_type.values():
+            if group:
+                out.append(group.pop(0))
+    return out
+
+
+def check_totals(con, buyers: list[str]) -> list[dict]:
+    """Pattern counts per buyer, computed from the data for the report (not by the model)."""
+    rows = []
+    for buyer in sorted(set(b for b in buyers if b)):
+        result = check_red_flags(con, buyer=buyer)
+        rows.append({"buyer": buyer, "awards_checked": result["awards_checked"],
+                     "flag_counts": result.get("flag_counts", {}),
+                     "data_problems": result.get("data_problems_total", 0)})
+    return rows
 
 
 def _flag(flag_type, award, evidence, why):

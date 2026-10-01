@@ -120,3 +120,28 @@ def test_flag_naming_the_right_supplier_carries_record_facts():
         "Jane Wanjiku"))
     assert out["status"] == "filed"
     assert out["record"]["bidders"] == 1 and out["record"]["winners"] == ["SALGAD INVESTMENT LIMITED"]
+
+
+def test_red_flag_totals_come_first_and_types_alternate(con):
+    from ke_tenders_audit import server
+    out = server.check_red_flags(buyer="PC KINYANJUI TECHNICAL TRAINING INSTITUTE")
+    assert out.index('"flag_counts"') < out.index('"flags"')
+    head = out[:400]                                   # what survives shortening in later steps
+    assert '"single_bidder":8' in head and '"repeat_winner_same_buyer":4' in head
+    types = [f["flag_type"] for f in json.loads(out)["flags"][:3]]
+    assert len(set(types)) == 3
+
+
+def test_report_carries_totals_computed_from_data():
+    """Dev run: the model's summary said no repeat-winner or signed-before-close patterns existed."""
+    from ke_tenders_audit import server
+    case_id = f"test-{uuid.uuid4().hex[:8]}"
+    server.file_flag(case_id, "ocds-5whusi-302526-PCKTTI-172", "single_bidder",
+                     "One bidder.", "IMOTH INSURANCE was the only bidder.", "Jane Wanjiku")
+    out = json.loads(server.draft_report(case_id, "Review", "Three single-bidder awards. Nothing else.",
+                                         "Jane Wanjiku"))
+    text = (cases.CASES_DIR / case_id / "report.md").read_text(encoding="utf-8")
+    assert out["status"] == "drafted"
+    assert "| repeat winner same buyer | 4 | 0 |" in text
+    assert "| signed before close | 1 | 0 |" in text
+    assert "| single bidder | 8 | 1 |" in text

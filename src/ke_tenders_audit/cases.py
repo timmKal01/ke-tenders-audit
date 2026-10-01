@@ -89,7 +89,8 @@ def _record_line(r: dict) -> str:
             f"amount(s) {amounts or 'none'}; bidders listed {r.get('bidders')}")
 
 
-def draft_report(case_id: str, title: str, summary: str, approved_by: str) -> dict:
+def draft_report(case_id: str, title: str, summary: str, approved_by: str,
+                 totals: list[dict] | None = None) -> dict:
     approver = _check_approver(approved_by)
     flags = load_flags(case_id)
     if not flags:
@@ -125,6 +126,27 @@ def draft_report(case_id: str, title: str, summary: str, approved_by: str) -> di
             f"- **Approved by:** {f['approved_by']} on {f['filed_at']}",
             "",
         ]
+    if totals:
+        filed: dict[str, int] = {}
+        for f in flags:
+            filed[f["flag_type"]] = filed.get(f["flag_type"], 0) + 1
+        lines += [
+            "## What the integrity checks found",
+            "",
+            "Computed directly from the data, not written by the model. If the summary above disagrees "
+            "with this table, the table is correct.",
+            "",
+            "| Buyer | Awards checked | Pattern | Found | Filed above |",
+            "|---|---|---|---|---|",
+        ]
+        for t in totals:
+            counts = t["flag_counts"] or {"none": 0}
+            for pattern, n in sorted(counts.items()):
+                lines.append(f"| {t['buyer']} | {t['awards_checked']} | {pattern.replace('_', ' ')} | {n} | "
+                             f"{filed.get(pattern, 0)} |")
+            lines.append(f"| {t['buyer']} | | data problems (not flags) | {t['data_problems']} | |")
+        lines += ["", "Patterns found but not filed were judged less important by the agent. "
+                      "The committee can ask for any of them.", ""]
     lines += [
         "## Limits of this review",
         "",

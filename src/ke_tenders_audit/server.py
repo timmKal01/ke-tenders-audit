@@ -103,7 +103,9 @@ def draft_report(case_id: str, title: str, summary: str, approved_by: str = "") 
     Needs a named human approver. Each finding in the report cites its OCDS record.
     """
     try:
-        return _out(cases.draft_report(case_id, title, summary, approved_by))
+        buyers = [f.get("record", {}).get("buyer") for f in cases.load_flags(case_id)]
+        totals = checks.check_totals(get_connection(), buyers)
+        return _out(cases.draft_report(case_id, title, summary, approved_by, totals))
     except cases.CaseError as e:
         return _out({"status": "refused", "reason": str(e)})
 
