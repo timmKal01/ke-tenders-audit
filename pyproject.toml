@@ -1,0 +1,36 @@
+[project]
+name = "ke-tenders-audit"
+version = "0.1.0"
+description = "Agentic AI that prepares a sourced review file on Kenyan public procurement awards for a human committee."
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+  "mcp>=1.30",
+  "langgraph>=1.2",
+  "langgraph-checkpoint-sqlite>=2.0",
+  "aiosqlite",
+  "langchain-mcp-adapters>=0.3",
+  "langchain-openai>=1.6",
+  "duckdb>=1.5",
+  "rapidfuzz>=3.14",
+  "streamlit>=1.64",
+  "python-dotenv",
+  "pytz",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+ke-tenders-ingest = "ke_tenders_audit.ingest:main"
+ke-tenders-mcp = "ke_tenders_audit.server:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
