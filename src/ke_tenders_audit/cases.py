@@ -29,7 +29,7 @@ class CaseError(ValueError):
 
 def plain_text(text: str) -> str:
     """House style: no em or en dashes in anything we write."""
-    text = re.sub(r"\s*[—–]\s*", ", ", text or "")
+    text = re.sub(r"\s*[\u2014\u2013]\s*", ", ", text or "")
     return text.strip()
 
 

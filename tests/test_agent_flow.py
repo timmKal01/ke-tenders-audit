@@ -47,7 +47,7 @@ def test_full_run_with_human_gate():
     assert len(flags) == 1
     assert flags[0]["approved_by"] == "Jane Wanjiku"      # gate replaced the model's "agent"
     report = (CASES_DIR / case_id / "report.md").read_text(encoding="utf-8")
-    assert KILIFI_OCID in report and "—" not in report
+    assert KILIFI_OCID in report and "\u2014" not in report
 
     log = AuditLog(thread).entries()
     kinds = [e["kind"] for e in log]

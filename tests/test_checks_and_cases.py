@@ -95,9 +95,9 @@ def test_unknown_ocid_is_refused():
 
 def test_em_dashes_are_removed():
     case_id = f"test-{uuid.uuid4().hex[:8]}"
-    flag = cases.file_flag(case_id, KILIFI_OCID, "t", "A pattern — worth a look", "KES 1", "Jane Wanjiku",
+    flag = cases.file_flag(case_id, KILIFI_OCID, "t", "A pattern \u2014 worth a look", "KES 1", "Jane Wanjiku",
                            {KILIFI_OCID})
-    assert "—" not in flag["finding"]
+    assert "\u2014" not in flag["finding"]
     assert json.loads((cases.CASES_DIR / case_id / "flags.json").read_text(encoding="utf-8"))[0]["flag_id"] == "F001"
 
 
