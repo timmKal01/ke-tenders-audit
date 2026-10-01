@@ -31,10 +31,17 @@ EXAMPLES = [
 ss = st.session_state
 ss.setdefault("thread_id", None)
 ss.setdefault("result", None)
+ss.setdefault("error", None)
 
 
 def run(coro):
-    return asyncio.run(coro)
+    """Run one agent step. On failure keep the run, so 'Retry last step' can continue it."""
+    try:
+        ss.error = None
+        return asyncio.run(coro)
+    except Exception as e:  # shown to the reviewer instead of a traceback
+        ss.error = f"{type(e).__name__}: {e}"
+        return ss.result
 
 
 def tool_timeline(thread_id: str):
@@ -107,6 +114,18 @@ if ss.thread_id is None:
     if not reviewer.strip():
         st.caption("Enter your name in the sidebar to start.")
     st.stop()
+
+if ss.error:
+    st.error("The last step failed. Your approvals so far are saved. "
+             "This is usually a network or rate-limit problem.")
+    with st.expander("Error details"):
+        st.code(ss.error)
+    if st.button("Retry last step", type="primary"):
+        with st.spinner("Continuing from the last saved step..."):
+            ss.result = run(agent.retry(ss.thread_id))
+        st.rerun()
+    if ss.result is None:
+        st.stop()
 
 result = ss.result
 left, right = st.columns([3, 2])

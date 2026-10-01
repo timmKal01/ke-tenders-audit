@@ -24,6 +24,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langchain_openai import ChatOpenAI
+from openai import DefaultAsyncHttpxClient
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
@@ -80,8 +81,9 @@ class State(TypedDict):
     steps: int
 
 
-def make_llm():
+def make_llm(http_async_client=None):
     return ChatOpenAI(
+        http_async_client=http_async_client,
         base_url=os.getenv("KTA_LLM_BASE_URL", "http://localhost:11434/v1"),
         api_key=os.getenv("KTA_LLM_API_KEY", "ollama"),
         model=os.getenv("KTA_LLM_MODEL", "qwen3:8b"),
@@ -302,21 +304,31 @@ def _strip_thinking(text: str) -> str:
 
 @asynccontextmanager
 async def open_agent(thread_id: str, llm=None):
-    """Open MCP sessions, the checkpointer and the audit log for one run or resume."""
+    """Open MCP sessions, the checkpointer and the audit log for one run or resume.
+
+    The model gets its own HTTP client, closed at the end. The library's shared
+    client would keep connections tied to an event loop that no longer exists
+    when the review screen resumes a run on a new loop.
+    """
     log = AuditLog(thread_id)
     client = MultiServerMCPClient(mcp_connections(), tool_interceptors=[log.interceptor])
     CHECKPOINTS.parent.mkdir(exist_ok=True)
-    async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINTS)) as saver:
-        async with client.session("audit") as audit_session:
-            tools = await load_mcp_tools(audit_session, tool_interceptors=[log.interceptor], server_name="audit")
-            if "files" in client.connections:
-                async with client.session("files") as files_session:
-                    borrowed = await load_mcp_tools(files_session, tool_interceptors=[log.interceptor],
-                                                    server_name="files")
-                    tools += [t for t in borrowed if t.name in BORROWED_READ_TOOLS]
-                    yield build_graph(llm or make_llm(), tools, log, saver), log
-            else:
-                yield build_graph(llm or make_llm(), tools, log, saver), log
+    http = DefaultAsyncHttpxClient(timeout=180)
+    try:
+        model = llm or make_llm(http)
+        async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINTS)) as saver:
+            async with client.session("audit") as audit_session:
+                tools = await load_mcp_tools(audit_session, tool_interceptors=[log.interceptor], server_name="audit")
+                if "files" in client.connections:
+                    async with client.session("files") as files_session:
+                        borrowed = await load_mcp_tools(files_session, tool_interceptors=[log.interceptor],
+                                                        server_name="files")
+                        tools += [t for t in borrowed if t.name in BORROWED_READ_TOOLS]
+                        yield build_graph(model, tools, log, saver), log
+                else:
+                    yield build_graph(model, tools, log, saver), log
+    finally:
+        await http.aclose()
 
 
 async def start(question: str, case_id: str, thread_id: str, llm=None) -> dict:
@@ -330,7 +342,19 @@ async def start(question: str, case_id: str, thread_id: str, llm=None) -> dict:
 async def resume(thread_id: str, decision: dict, llm=None) -> dict:
     async with open_agent(thread_id, llm) as (graph, log):
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 80}
-        result = await graph.ainvoke(Command(resume=decision), config)
+        snapshot = await graph.aget_state(config)
+        waiting = any(task.interrupts for task in snapshot.tasks)
+        # If the run is not waiting for approval (it failed after the last one), continue it instead.
+        result = await graph.ainvoke(Command(resume=decision) if waiting else None, config)
+        return _outcome(result, log)
+
+
+async def retry(thread_id: str, llm=None) -> dict:
+    """Continue a run from its last checkpoint, e.g. after a network or rate-limit error."""
+    async with open_agent(thread_id, llm) as (graph, log):
+        log.event("retry", {})
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 80}
+        result = await graph.ainvoke(None, config)
         return _outcome(result, log)
 
 
