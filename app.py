@@ -55,8 +55,10 @@ def tool_timeline(thread_id: str):
                 st.code(e.get("output") or e.get("error", ""), language="json")
         elif e["kind"] == "verify":
             st.warning("Verifier: " + "; ".join(e["problems"]))
+        elif e["kind"] in ("grounding_refused", "blocked_repeat"):
+            st.error(f"Refused before review: {e['reason']}")
         elif e["kind"] == "human_decision":
-            icon = "✅" if e["outcome"] == "approved" else "❌"
+            icon = {"approved": "✅", "changes_requested": "✏️"}.get(e["outcome"], "❌")
             st.info(f"{icon} {e['reviewer']} {e['outcome']} `{e['tool']}`" + (f": {e['note']}" if e["note"] else ""))
 
 
@@ -153,12 +155,18 @@ with left:
                     show_record(args.get("ocid", ""))
                 else:
                     st.markdown(f"- Title: {args.get('title')}\n- Summary: {args.get('summary')}")
-                decisions[p["id"]] = st.radio("Decision", ["Approve", "Reject"], key=f"d-{p['id']}", horizontal=True)
-                notes[p["id"]] = st.text_input("Note (required when rejecting)", key=f"n-{p['id']}")
-        if st.button("Submit decisions", type="primary", disabled=not reviewer.strip()):
+                decisions[p["id"]] = st.radio(
+                    "Decision", ["Approve", "Request changes", "Reject"], key=f"d-{p['id']}", horizontal=True,
+                    help="Request changes: the agent revises using your note. Reject: it will not be proposed again.")
+                notes[p["id"]] = st.text_input("Note (required for Request changes)", key=f"n-{p['id']}")
+        missing_note = any(d == "Request changes" and not notes[i].strip() for i, d in decisions.items())
+        if missing_note:
+            st.caption("Add a note to every item where you request changes.")
+        if st.button("Submit decisions", type="primary", disabled=not reviewer.strip() or missing_note):
             decision = {
                 "reviewer": reviewer.strip(),
                 "approved": [i for i, d in decisions.items() if d == "Approve"],
+                "changes": [i for i, d in decisions.items() if d == "Request changes"],
                 "notes": {i: n for i, n in notes.items() if n},
             }
             with st.spinner("Continuing the review..."):

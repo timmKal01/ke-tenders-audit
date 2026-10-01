@@ -95,3 +95,46 @@ def test_invented_ocid_never_reaches_the_reviewer():
     refusal = [m for m in result["messages"] if getattr(m, "tool_call_id", None) == "g1"][0]
     assert "did not appear in any tool result" in refusal.content
     assert any(e["kind"] == "grounding_refused" for e in AuditLog(thread).entries())
+
+
+def test_rejected_report_is_not_proposed_again():
+    """Dev run: the reviewer rejected draft_report and the model proposed it again 9 seconds later."""
+    case_id = f"test-{uuid.uuid4().hex[:8]}"
+    thread = f"test-{case_id}"
+    report = {"case_id": case_id, "title": "Review", "summary": "Nothing found."}
+    llm = ScriptedLLM(script=[
+        "1. Draft the report.",
+        call("draft_report", report, "d1"),
+        call("draft_report", report, "d2"),          # the model tries again
+        "The reviewer rejected the report, so I stopped.",
+    ])
+    first = asyncio.run(agent.start("Draft a report", case_id, thread, llm=llm))
+    assert first["status"] == "needs_approval"
+    final = asyncio.run(agent.resume(thread, {"reviewer": "Jane Wanjiku", "approved": [], "notes": {"d1": "NA"}},
+                                     llm=llm))
+    assert final["status"] == "done"                 # the repeat never reached the reviewer
+    repeat = [m for m in final["messages"] if getattr(m, "tool_call_id", None) == "d2"][0]
+    assert "already rejected" in repeat.content
+    assert any(e["kind"] == "blocked_repeat" for e in AuditLog(thread).entries())
+
+
+def test_request_changes_lets_the_agent_revise():
+    case_id = f"test-{uuid.uuid4().hex[:8]}"
+    thread = f"test-{case_id}"
+    llm = ScriptedLLM(script=[
+        "1. Check the tender. 2. File a flag.",
+        call("check_red_flags", {"ocid": KILIFI_OCID}, "q0"),
+        call("file_flag", {"case_id": case_id, "ocid": KILIFI_OCID, "flag_type": "just_below_round_amount",
+                           "finding": "Close to 5 million.", "evidence": "KES 4,999,993.25"}, "q1"),
+        call("file_flag", {"case_id": case_id, "ocid": KILIFI_OCID, "flag_type": "just_below_round_amount",
+                           "finding": "The award is KES 6.75 below KES 5,000,000.",
+                           "evidence": "KES 4,999,993.25 against a round limit of KES 5,000,000."}, "q2"),
+        "Filed the revised flag.",
+    ])
+    asyncio.run(agent.start("Check Kilifi", case_id, thread, llm=llm))
+    second = asyncio.run(agent.resume(thread, {"reviewer": "Jane Wanjiku", "approved": [], "changes": ["q1"],
+                                               "notes": {"q1": "State the exact gap in shillings."}}, llm=llm))
+    assert second["status"] == "needs_approval"      # same ocid and type, but changes were requested
+    final = asyncio.run(agent.resume(thread, {"reviewer": "Jane Wanjiku", "approved": ["q2"]}, llm=llm))
+    assert final["status"] == "done"
+    assert load_flags(case_id)[0]["finding"].startswith("The award is KES 6.75 below")

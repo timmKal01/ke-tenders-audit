@@ -69,6 +69,8 @@ How to work:
   the ocid, a flag_type, a one-sentence finding and the evidence numbers. Leave approved_by empty:
   a human reviewer fills it in.
 - File at most 4 flags, the most important ones. When done, call draft_report once.
+- If the reviewer rejects a write, never propose it again. If they request changes, revise it using
+  their note and propose it once more.
 - Then reply with a short plain summary of what you checked, what you flagged and what you could not check.
 Write plain sentences. Never use em dashes."""
 
@@ -79,6 +81,7 @@ class State(TypedDict):
     plan: str
     messages: Annotated[list, add_messages]
     steps: int
+    blocked: list[str]  # writes the reviewer rejected; refused if proposed again
 
 
 def make_llm(http_async_client=None):
@@ -188,48 +191,61 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
 
     def gate(state: State):
         ai = _last_ai(state["messages"])
-        # Flags citing an ocid no tool returned are refused before a human sees them.
-        ungrounded = [c for c in _pending_calls(state["messages"]) if ungrounded_ocid(c, state["messages"])]
-        if ungrounded:
-            refusals = [ToolMessage(
-                content=json.dumps({"status": "refused", "reason": f"ocid '{c['args'].get('ocid')}' did not appear in "
-                                    "any tool result in this review. Cite an ocid exactly as a tool returned it."}),
-                tool_call_id=c["id"], name=c["name"]) for c in ungrounded]
-            kept = [c for c in ai.tool_calls if c not in ungrounded]
-            if not any(c["name"] in WRITE_TOOLS for c in kept):
-                _log_grounding(log, ungrounded)
-                return {"messages": [AIMessage(content=ai.content, tool_calls=kept, id=ai.id), *refusals]}
-            ai = AIMessage(content=ai.content, tool_calls=kept, id=ai.id)
-        else:
-            refusals = []
+        pending = _pending_calls(state["messages"])
+        blocked = set(state.get("blocked") or [])
+        # Refused before a human sees them: flags citing an ocid no tool returned,
+        # and writes the reviewer already rejected in this run.
+        auto = {}
+        for c in pending:
+            if ungrounded_ocid(c, state["messages"]):
+                auto[c["id"]] = (c, f"ocid '{c['args'].get('ocid')}' did not appear in any tool result in this "
+                                    "review. Cite an ocid exactly as a tool returned it.", "grounding_refused")
+            elif c["name"] in WRITE_TOOLS and write_key(c) in blocked:
+                auto[c["id"]] = (c, "The reviewer already rejected this in this review. Do not propose it again. "
+                                    "Finish with your summary.", "blocked_repeat")
+        refusals = [ToolMessage(content=json.dumps({"status": "refused", "reason": reason}),
+                                tool_call_id=c["id"], name=c["name"]) for c, reason, _ in auto.values()]
+        ai = AIMessage(content=ai.content, tool_calls=[c for c in ai.tool_calls if c["id"] not in auto], id=ai.id)
         writes = [c for c in ai.tool_calls if c["name"] in WRITE_TOOLS]
+        if not writes:
+            _log_auto(log, auto)
+            return {"messages": [ai, *refusals]}
+
         decision = interrupt({
             "type": "approval_needed",
             "proposals": [{"id": c["id"], "tool": c["name"], "args": c["args"]} for c in writes],
         })
-        _log_grounding(log, ungrounded)  # after interrupt(), so a resumed node does not log twice
+        _log_auto(log, auto)  # after interrupt(), so a resumed node does not log twice
         reviewer = (decision.get("reviewer") or "").strip()
         approved = set(decision.get("approved", []))
+        changes = set(decision.get("changes", []))
         notes = decision.get("notes", {})
 
-        new_calls, rejections = [], []
+        new_calls, answers = [], []
         for c in ai.tool_calls:
+            note = notes.get(c["id"], "")
             if c["name"] not in WRITE_TOOLS:
                 new_calls.append(c)
             elif c["id"] in approved and reviewer:
                 new_calls.append({**c, "args": {**c["args"], "approved_by": reviewer}})
+                log.decision(new_calls[-1], "approved", reviewer, note)
+            elif c["id"] in changes:
+                answers.append(ToolMessage(
+                    content=json.dumps({"status": "changes_requested", "reviewer": reviewer or "unknown",
+                                        "note": note or "no note",
+                                        "instruction": "Revise this using the note and propose it once more."}),
+                    tool_call_id=c["id"], name=c["name"]))
+                log.decision(c, "changes_requested", reviewer, note)
             else:
-                note = notes.get(c["id"], "no reason given")
-                rejections.append(ToolMessage(
+                blocked.add(write_key(c))
+                answers.append(ToolMessage(
                     content=json.dumps({"status": "rejected_by_reviewer", "reviewer": reviewer or "unknown",
-                                        "note": note, "instruction": "Do not file this again unless the reviewer asks."}),
+                                        "note": note or "no reason given",
+                                        "instruction": "Do not propose this again."}),
                     tool_call_id=c["id"], name=c["name"]))
                 log.decision(c, "rejected", reviewer, note)
-        for c in new_calls:
-            if c["name"] in WRITE_TOOLS:
-                log.decision(c, "approved", reviewer, notes.get(c["id"], ""))  # args now carry the reviewer
         updated = AIMessage(content=ai.content, tool_calls=new_calls, id=ai.id)
-        return {"messages": [updated, *refusals, *rejections]}
+        return {"messages": [updated, *refusals, *answers], "blocked": sorted(blocked)}
 
     async def run_tools(state: State):
         results = []
@@ -283,9 +299,16 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
     return graph.compile(checkpointer=checkpointer)
 
 
-def _log_grounding(log: AuditLog, calls: list[dict]) -> None:
-    for c in calls:
-        log.event("grounding_refused", {"tool": c["name"], "ocid": c["args"].get("ocid")})
+def write_key(call: dict) -> str:
+    """What makes two write proposals 'the same' for blocking repeats."""
+    if call["name"] == "file_flag":
+        return f"file_flag:{call['args'].get('ocid')}:{call['args'].get('flag_type')}"
+    return call["name"]
+
+
+def _log_auto(log: AuditLog, auto: dict) -> None:
+    for c, reason, kind in auto.values():
+        log.event(kind, {"tool": c["name"], "ocid": c["args"].get("ocid"), "reason": reason})
 
 
 def _as_text(content) -> str:
