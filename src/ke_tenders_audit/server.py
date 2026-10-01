@@ -5,7 +5,7 @@ OCDS records as MCP resources. Run it with `ke-tenders-mcp` (stdio).
 """
 
 import json
-from urllib.parse import quote, unquote
+from urllib.parse import unquote
 
 from mcp.server.fastmcp import FastMCP
 
@@ -26,81 +26,76 @@ def _known_ocids() -> set[str]:
     return {r[0] for r in get_connection().execute("SELECT ocid FROM tenders").fetchall()}
 
 
-def _resource_uri(ocid: str) -> str:
-    return f"ocds://release/{quote(ocid, safe='')}"
+def _out(result: dict) -> str:
+    """Compact JSON: the free model tier counts every token, so no indentation."""
+    return json.dumps(result, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
 @mcp.tool()
 def search_awards(buyer: str | None = None, item: str | None = None, supplier: str | None = None,
                   category: str | None = None, method: str | None = None,
-                  date_from: str | None = None, date_to: str | None = None, limit: int = 25) -> dict:
-    """Find published awards. Filters are optional and combine with AND.
+                  date_from: str | None = None, date_to: str | None = None, limit: int = 10) -> str:
+    """Find published awards. All filters optional.
 
-    buyer: part of the buyer name, e.g. 'Kilifi County'.
-    item: a word from the tender title or an item group, e.g. 'stationery'.
-    supplier: company name (normalised, so 'Ltd' and 'Limited' match).
-    category: goods, services or works. method: open, selective or direct.
-    date_from / date_to: contract signing date, YYYY-MM-DD.
-    If nothing matches, the result explains why and suggests close buyer names.
+    buyer: part of the buyer name. item: word from the title or item group. supplier: company name.
+    category: goods|services|works. method: open|selective|direct. date_from/date_to: YYYY-MM-DD signing date.
+    If nothing matches, explains why and suggests close buyer names.
     """
-    return checks.search_awards(get_connection(), buyer, item, supplier, category, method,
-                                date_from, date_to, max(1, min(limit, 100)))
+    return _out(checks.search_awards(get_connection(), buyer, item, supplier, category, method,
+                                     date_from, date_to, max(1, min(limit, 30))))
 
 
 @mcp.tool()
-def price_benchmark(ocid: str) -> dict:
-    """Compare the award value(s) on one tender with similar past awards (same item group and category).
+def price_benchmark(ocid: str) -> str:
+    """Compare one tender's award value with similar awards (same item group and category).
 
-    Returns median, quartiles, ratio to median and whether it is an outlier, plus the comparable ocids.
-    Says 'insufficient comparables' rather than guessing when there are fewer than 5.
+    Returns median, quartiles, ratio to median, outlier yes/no. Says so when under 5 comparables.
     """
-    return checks.price_benchmark(get_connection(), ocid)
+    return _out(checks.price_benchmark(get_connection(), ocid))
 
 
 @mcp.tool()
-def supplier_profile(name: str) -> dict:
+def supplier_profile(name: str) -> str:
     """Profile a supplier company: bids listed, awards won, win rate, buyers, single-bidder wins.
 
     Uses fuzzy matching on the company name. Company records only, never personal details.
     """
-    return checks.supplier_profile(get_connection(), name)
+    return _out(checks.supplier_profile(get_connection(), name))
 
 
 @mcp.tool()
-def check_red_flags(ocid: str | None = None, buyer: str | None = None) -> dict:
-    """Run the integrity checks on one tender (ocid) or all awards of a buyer.
+def check_red_flags(ocid: str | None = None, buyer: str | None = None) -> str:
+    """Integrity checks for one tender (ocid) or all awards of a buyer.
 
-    Checks: single bidder, direct procurement, contract signed before tender closed,
-    amount just below a round limit, same supplier winning repeatedly from the same buyer.
-    Also returns data problems found in scope, which are not flags.
+    Single bidder, direct method, signed before tender closed, just below a round amount,
+    repeat winner at the same buyer. Data problems are listed separately and are not flags.
     """
-    return checks.check_red_flags(get_connection(), ocid, buyer)
+    return _out(checks.check_red_flags(get_connection(), ocid, buyer))
 
 
 @mcp.tool()
-def file_flag(case_id: str, ocid: str, flag_type: str, finding: str, evidence: str, approved_by: str) -> dict:
-    """WRITE. Add one flag to the case file. Needs a named human approver.
+def file_flag(case_id: str, ocid: str, flag_type: str, finding: str, evidence: str, approved_by: str = "") -> str:
+    """WRITE, needs human approval. Add one flag to the case file.
 
-    finding: the pattern in plain words. evidence: the facts and numbers behind it.
-    Refused if the ocid does not exist, the approver is missing, or the wording decides
-    the award or declares wrongdoing.
+    finding: the pattern in one plain sentence. evidence: the numbers behind it. Refused if the ocid
+    is unknown or the wording decides the award or declares wrongdoing.
     """
     try:
-        return cases.file_flag(case_id, ocid, flag_type, finding, evidence, approved_by, _known_ocids())
+        return _out(cases.file_flag(case_id, ocid, flag_type, finding, evidence, approved_by, _known_ocids()))
     except cases.CaseError as e:
-        return {"status": "refused", "reason": str(e)}
+        return _out({"status": "refused", "reason": str(e)})
 
 
 @mcp.tool()
-def draft_report(case_id: str, title: str, summary: str, approved_by: str) -> dict:
+def draft_report(case_id: str, title: str, summary: str, approved_by: str = "") -> str:
     """WRITE. Build the committee report (report.md) from the approved flags in a case.
 
     Needs a named human approver. Each finding in the report cites its OCDS record.
     """
     try:
-        return cases.draft_report(case_id, title, summary, approved_by)
+        return _out(cases.draft_report(case_id, title, summary, approved_by))
     except cases.CaseError as e:
-        return {"status": "refused", "reason": str(e)}
+        return _out({"status": "refused", "reason": str(e)})
 
 
 @mcp.resource("ocds://release/{ocid}", mime_type="application/json")

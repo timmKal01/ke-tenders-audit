@@ -62,7 +62,8 @@ def test_rejected_flag_is_not_written():
     case_id = f"test-{uuid.uuid4().hex[:8]}"
     thread = f"test-{case_id}"
     llm = ScriptedLLM(script=[
-        "1. File one flag.",
+        "1. Check the tender. 2. File one flag.",
+        call("check_red_flags", {"ocid": KILIFI_OCID}, "r0"),
         call("file_flag", {"case_id": case_id, "ocid": KILIFI_OCID, "flag_type": "x",
                            "finding": "f", "evidence": "e"}, "r1"),
         "Reviewer rejected the flag, so the case file is empty.",
@@ -75,3 +76,22 @@ def test_rejected_flag_is_not_written():
     assert load_flags(case_id) == []
     rejection = [m for m in final["messages"] if getattr(m, "tool_call_id", None) == "r1"][0]
     assert json.loads(rejection.content)["status"] == "rejected_by_reviewer"
+
+
+def test_invented_ocid_never_reaches_the_reviewer():
+    case_id = f"test-{uuid.uuid4().hex[:8]}"
+    thread = f"test-{case_id}"
+    invented = "ocds-5whusi-302514-PCKTTI-168"   # the real model made this one up in a dev run
+    llm = ScriptedLLM(script=[
+        "1. Check the buyer. 2. File a flag.",
+        call("search_awards", {"buyer": "PC Kinyanjui"}, "g0"),
+        call("file_flag", {"case_id": case_id, "ocid": invented, "flag_type": "single_bidder",
+                           "finding": "One bidder.", "evidence": "1 bidder listed."}, "g1"),
+        "The flag was refused because its ocid did not come from a tool.",
+    ])
+    result = asyncio.run(agent.start("Review PC Kinyanjui", case_id, thread, llm=llm))
+    assert result["status"] == "done"            # no approval was requested
+    assert load_flags(case_id) == []
+    refusal = [m for m in result["messages"] if getattr(m, "tool_call_id", None) == "g1"][0]
+    assert "did not appear in any tool result" in refusal.content
+    assert any(e["kind"] == "grounding_refused" for e in AuditLog(thread).entries())

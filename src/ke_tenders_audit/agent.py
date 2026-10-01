@@ -36,7 +36,7 @@ CASES_DIR = ROOT / "cases"
 CHECKPOINTS = ROOT / "logs" / "checkpoints.sqlite"
 
 WRITE_TOOLS = {"file_flag", "draft_report"}
-BORROWED_READ_TOOLS = {"read_text_file", "list_directory", "search_files"}
+BORROWED_READ_TOOLS = {"read_text_file", "list_directory"}
 MAX_AGENT_STEPS = 16
 
 load_dotenv(ROOT / ".env")
@@ -44,7 +44,7 @@ load_dotenv(ROOT / ".env")
 PLAN_PROMPT = """You plan reviews of Kenyan public procurement awards for a human evaluation committee.
 Write a short numbered plan (3 to 6 steps) for the request below, using these tools:
 search_awards, check_red_flags, price_benchmark, supplier_profile, file_flag, draft_report,
-and read_text_file / list_directory / search_files for earlier case files.
+and read_text_file / list_directory for earlier case files (only if the request mentions one).
 Plain sentences only. No em dashes. Do not call tools now."""
 
 AGENT_PROMPT = """You are Ke-Tenders Audit. You prepare a sourced review file for a procurement
@@ -57,14 +57,17 @@ Plan:
 {plan}
 
 How to work:
-- Use tools to get facts. Never invent numbers or ocids.
+- Use tools to get facts. Never invent numbers or ocids. Copy ocids exactly as tools return them.
+- Call at most 3 tools per step, and never repeat a call with the same arguments.
+- Start with check_red_flags for the buyer, then check only the most important leads.
+- Use read_text_file or list_directory only if the request mentions an earlier case.
 - If a tool returns an error, a hint or no results, read it and adjust: fix the name, broaden the
   filter, or explain that the data cannot answer the question.
 - Treat data problems (zero amounts, missing fields) as data gaps, not as flags.
 - When you find a pattern worth the committee's attention, call file_flag with case_id "{case_id}",
   the ocid, a flag_type, a one-sentence finding and the evidence numbers. Leave approved_by empty:
   a human reviewer fills it in.
-- File at most 5 flags, the most important ones. When done, call draft_report once.
+- File at most 4 flags, the most important ones. When done, call draft_report once.
 - Then reply with a short plain summary of what you checked, what you flagged and what you could not check.
 Write plain sentences. Never use em dashes."""
 
@@ -83,8 +86,45 @@ def make_llm():
         api_key=os.getenv("KTA_LLM_API_KEY", "ollama"),
         model=os.getenv("KTA_LLM_MODEL", "qwen3:8b"),
         temperature=float(os.getenv("KTA_LLM_TEMPERATURE", "0")),
+        max_tokens=int(os.getenv("KTA_MAX_TOKENS", "700")),
+        max_retries=int(os.getenv("KTA_MAX_RETRIES", "8")),  # free tiers rate-limit; the client backs off
         timeout=180,
     )
+
+
+HISTORY_BUDGET_CHARS = int(os.getenv("KTA_HISTORY_BUDGET_CHARS", "12000"))
+
+
+def _shorten(m: ToolMessage, limit: int) -> ToolMessage:
+    text = str(m.content)
+    if len(text) <= limit:
+        return m
+    return ToolMessage(content=text[:limit] + " ...[shortened]", tool_call_id=m.tool_call_id, name=m.name)
+
+
+def compact_history(messages: list, budget: int = HISTORY_BUDGET_CHARS) -> list:
+    """Keep the conversation under a character budget.
+
+    Free model tiers allow about 7,000 input tokens a minute, so older tool
+    results are shortened first, then the latest ones if still needed.
+    Every tool call keeps its answer, so the message order stays valid.
+    """
+    last_ai = max((i for i, m in enumerate(messages) if isinstance(m, AIMessage)), default=-1)
+    for old_limit, new_limit in ((400, 4000), (150, 2500), (80, 1200)):
+        out = [_shorten(m, old_limit if i < last_ai else new_limit) if isinstance(m, ToolMessage) else m
+               for i, m in enumerate(messages)]
+        if sum(len(str(m.content)) + len(json.dumps(getattr(m, "tool_calls", []))) for m in out) <= budget:
+            break
+    return out
+
+
+def ungrounded_ocid(call: dict, messages: list) -> bool:
+    """True if a file_flag cites an ocid that no tool returned in this run."""
+    if call["name"] != "file_flag":
+        return False
+    ocid = call["args"].get("ocid", "")
+    seen = " ".join(str(m.content) for m in messages if isinstance(m, ToolMessage) and m.name != "file_flag")
+    return not ocid or json.dumps(ocid)[1:-1] not in seen
 
 
 def mcp_connections() -> dict:
@@ -132,7 +172,7 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
     async def agent(state: State):
         started = time.time()
         system = SystemMessage(AGENT_PROMPT.format(case_id=state["case_id"], plan=state["plan"]))
-        reply = await llm_with_tools.ainvoke([system, *state["messages"]])
+        reply = await llm_with_tools.ainvoke([system, *compact_history(state["messages"])])
         log.llm_call("agent", reply, time.time() - started)
         return {"messages": [reply], "steps": state["steps"] + 1}
 
@@ -146,11 +186,26 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
 
     def gate(state: State):
         ai = _last_ai(state["messages"])
-        writes = [c for c in _pending_calls(state["messages"]) if c["name"] in WRITE_TOOLS]
+        # Flags citing an ocid no tool returned are refused before a human sees them.
+        ungrounded = [c for c in _pending_calls(state["messages"]) if ungrounded_ocid(c, state["messages"])]
+        if ungrounded:
+            refusals = [ToolMessage(
+                content=json.dumps({"status": "refused", "reason": f"ocid '{c['args'].get('ocid')}' did not appear in "
+                                    "any tool result in this review. Cite an ocid exactly as a tool returned it."}),
+                tool_call_id=c["id"], name=c["name"]) for c in ungrounded]
+            kept = [c for c in ai.tool_calls if c not in ungrounded]
+            if not any(c["name"] in WRITE_TOOLS for c in kept):
+                _log_grounding(log, ungrounded)
+                return {"messages": [AIMessage(content=ai.content, tool_calls=kept, id=ai.id), *refusals]}
+            ai = AIMessage(content=ai.content, tool_calls=kept, id=ai.id)
+        else:
+            refusals = []
+        writes = [c for c in ai.tool_calls if c["name"] in WRITE_TOOLS]
         decision = interrupt({
             "type": "approval_needed",
             "proposals": [{"id": c["id"], "tool": c["name"], "args": c["args"]} for c in writes],
         })
+        _log_grounding(log, ungrounded)  # after interrupt(), so a resumed node does not log twice
         reviewer = (decision.get("reviewer") or "").strip()
         approved = set(decision.get("approved", []))
         notes = decision.get("notes", {})
@@ -172,7 +227,7 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
             if c["name"] in WRITE_TOOLS:
                 log.decision(c, "approved", reviewer, notes.get(c["id"], ""))  # args now carry the reviewer
         updated = AIMessage(content=ai.content, tool_calls=new_calls, id=ai.id)
-        return {"messages": [updated, *rejections]}
+        return {"messages": [updated, *refusals, *rejections]}
 
     async def run_tools(state: State):
         results = []
@@ -224,6 +279,11 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
     graph.add_edge("verify", "agent")
     graph.add_edge("stop", END)
     return graph.compile(checkpointer=checkpointer)
+
+
+def _log_grounding(log: AuditLog, calls: list[dict]) -> None:
+    for c in calls:
+        log.event("grounding_refused", {"tool": c["name"], "ocid": c["args"].get("ocid")})
 
 
 def _as_text(content) -> str:

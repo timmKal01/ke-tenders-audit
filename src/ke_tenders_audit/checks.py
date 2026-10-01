@@ -49,7 +49,7 @@ def buyer_hint(con, buyer: str) -> dict:
 
 
 def search_awards(con, buyer=None, item=None, supplier=None, category=None, method=None,
-                  date_from=None, date_to=None, limit=25) -> dict:
+                  date_from=None, date_to=None, limit=10) -> dict:
     where, params = ["1=1"], []
     if buyer:
         where.append("t.buyer_name ILIKE ?"); params.append(f"%{buyer}%")
@@ -67,8 +67,8 @@ def search_awards(con, buyer=None, item=None, supplier=None, category=None, meth
         where.append("a.date_signed <= ?::TIMESTAMPTZ"); params.append(date_to)
 
     sql = f"""
-        SELECT a.ocid, t.buyer_name AS buyer, t.title, t.item_group, t.method, t.category,
-               a.award_id, a.amount, a.supplier_name AS supplier, a.date_signed,
+        SELECT a.ocid, t.buyer_name AS buyer, left(t.title, 70) AS title, t.item_group, t.method,
+               a.amount, a.supplier_name AS supplier, a.date_signed,
                (SELECT count(*) FROM bidders b WHERE b.ocid = a.ocid) AS bidders
         FROM awards a JOIN tenders t USING (ocid)
         WHERE {' AND '.join(where)}
@@ -124,7 +124,7 @@ def price_benchmark(con, ocid: str) -> dict:
             median=round(median, 2), q1=round(q1, 2), q3=round(q3, 2),
             ratio_to_median=round(award["amount"] / median, 2),
             outlier=award["amount"] > upper_fence,
-            comparable_ocids=[c["ocid"] for c in comps][:10],
+            comparable_ocids=[c["ocid"] for c in comps][:5],
             status="compared",
         )
         results.append(entry)
@@ -155,7 +155,7 @@ def supplier_profile(con, name: str) -> dict:
                 "candidates": [k for k, s in matches if s >= 60]}
     key = matches[0][0]
     bids = _rows(con, "SELECT ocid, is_winner FROM bidders WHERE supplier_key = ?", [key])
-    wins = _rows(con, """SELECT a.ocid, a.amount, t.buyer_name AS buyer, t.title,
+    wins = _rows(con, """SELECT a.ocid, a.amount, t.buyer_name AS buyer, left(t.title, 60) AS title,
                                 (SELECT count(*) FROM bidders b WHERE b.ocid = a.ocid) AS bidders
                          FROM awards a JOIN tenders t USING (ocid) WHERE a.supplier_key = ?""", [key])
     by_buyer: dict[str, int] = {}
@@ -171,7 +171,7 @@ def supplier_profile(con, name: str) -> dict:
         "total_awarded_kes": round(sum(w["amount"] or 0 for w in wins), 2),
         "awards_by_buyer": by_buyer,
         "single_bidder_wins": [w["ocid"] for w in wins if w["bidders"] == 1],
-        "awards": wins[:20],
+        "awards": wins[:8],
         "note": "Company records only. Bids are only visible on awarded tenders in this feed.",
     }
 
@@ -229,13 +229,14 @@ def check_red_flags(con, ocid=None, buyer=None) -> dict:
     return {
         "scope": ocid or buyer,
         "awards_checked": len(awards),
-        "flags": flags,
-        "data_problems": issues,
+        "flags": flags[:15],
+        "flags_total": len(flags),
+        "data_problems_total": len(issues),
+        "data_problems": issues[:5],
         "note": "Flags are patterns for a human to review, not findings of wrongdoing.",
     }
 
 
 def _flag(flag_type, award, evidence, why):
-    return {"flag_type": flag_type, "ocid": award["ocid"], "award_id": award["award_id"],
-            "supplier": award["supplier_name"], "buyer": award["buyer_name"],
+    return {"flag_type": flag_type, "ocid": award["ocid"], "supplier": award["supplier_name"],
             "evidence": evidence, "why_it_matters": why}
