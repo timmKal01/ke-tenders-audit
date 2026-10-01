@@ -16,7 +16,8 @@ import streamlit as st
 from ke_tenders_audit import agent
 from ke_tenders_audit.audit_log import AuditLog
 from ke_tenders_audit.cases import CASES_DIR
-from ke_tenders_audit.data import releases_by_ocid
+from ke_tenders_audit import checks
+from ke_tenders_audit.data import get_connection, releases_by_ocid
 
 st.set_page_config(page_title="Ke-Tenders Audit", page_icon="⚖️", layout="wide")
 
@@ -50,6 +51,21 @@ def tool_timeline(thread_id: str):
         elif e["kind"] == "human_decision":
             icon = "✅" if e["outcome"] == "approved" else "❌"
             st.info(f"{icon} {e['reviewer']} {e['outcome']} `{e['tool']}`" + (f": {e['note']}" if e["note"] else ""))
+
+
+def show_facts(ocid: str, claim: str):
+    """Put the record's own facts beside the model's claim, and warn on a mismatch."""
+    con = get_connection()
+    facts = checks.record_facts(con, ocid)
+    if not facts["buyer"]:
+        st.error("This ocid is not in the data.")
+        return
+    amounts = ", ".join(f"KES {a:,.0f}" if a else "KES 0 (data gap)" for a in facts["amounts_kes"]) or "none"
+    st.markdown(f"**Record says:** winner {', '.join(facts['winners']) or 'none'} · amount {amounts} · "
+                f"{facts['bidders']} bidder(s) listed · method {facts['method']} · buyer {facts['buyer']}")
+    wrong = checks.suppliers_mentioned(con, claim) - facts["_keys"]
+    if wrong:
+        st.error(f"Mismatch: the flag names {', '.join(sorted(wrong))}, who is not a bidder or winner on this record.")
 
 
 def show_record(ocid: str):
@@ -114,6 +130,7 @@ with left:
                 if p["tool"] == "file_flag":
                     st.markdown(f"- Type: `{args.get('flag_type')}`\n- Finding: {args.get('finding')}\n"
                                 f"- Evidence: {args.get('evidence')}\n- Source: `{args.get('ocid')}`")
+                    show_facts(args.get("ocid", ""), f"{args.get('finding', '')} {args.get('evidence', '')}")
                     show_record(args.get("ocid", ""))
                 else:
                     st.markdown(f"- Title: {args.get('title')}\n- Summary: {args.get('summary')}")
