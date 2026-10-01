@@ -7,6 +7,7 @@ rejects each proposed write, and downloads the sourced report.
 
 import asyncio
 import json
+import re
 import os
 import uuid
 from urllib.parse import quote
@@ -40,8 +41,21 @@ def run(coro):
         ss.error = None
         return asyncio.run(coro)
     except Exception as e:  # shown to the reviewer instead of a traceback
-        ss.error = f"{type(e).__name__}: {e}"
+        ss.error = describe_error(e)
         return ss.result
+
+
+def describe_error(e: BaseException) -> str:
+    """MCP and asyncio wrap errors in groups; show the reviewer the real one."""
+    while isinstance(e, BaseExceptionGroup) and e.exceptions:
+        e = e.exceptions[0]
+    text = str(e)
+    if "rate_limit" in text or "Rate limit" in text:
+        wait = re.search(r"try again in ([\w.]+)", text)
+        scope = "per day" if "per day" in text else "per minute"
+        return (f"The model provider's free-tier limit ({scope}) is used up. "
+                f"Try again in {wait.group(1) if wait else 'a while'}, then press Retry last step.\n\n{text}")
+    return f"{type(e).__name__}: {text}"
 
 
 def tool_timeline(thread_id: str):
