@@ -1,4 +1,4 @@
-# Hugging Face Space (Docker SDK). Also runs anywhere: docker build -t kta . && docker run -p 7860:7860 kta
+# Runs anywhere Docker runs: docker build -t kta . && docker run -p 7860:7860 -e KTA_LLM_API_KEY=... kta
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
