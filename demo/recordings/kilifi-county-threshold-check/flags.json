@@ -1,0 +1,23 @@
+[
+  {
+    "flag_id": "F001",
+    "ocid": "ocds-5whusi-290427-KCG/WSNRM/2122735/2025/2026.",
+    "flag_type": "just_below_round_amount",
+    "finding": "The awarded amount of KES 4,999,993.25 sits within 3% below the KES 5,000,000 round threshold, which may indicate threshold avoidance.",
+    "evidence": "Award amount KES 4,999,993.25; round threshold KES 5,000,000; gap KES 6.75 (0.000135% below). Method: open tender, 3 bidders, signed 2026-03-20.",
+    "record": {
+      "buyer": "Kilifi County Government",
+      "title": "PROPOSED CONSTRUCTION OF KWA GONDA TO MGANDINI WATER PIPELINE IN RABAI KISURUTIN",
+      "method": "open",
+      "winners": [
+        "KIOLI INVESTMENTS LIMITED"
+      ],
+      "amounts_kes": [
+        4999993.25
+      ],
+      "bidders": 3
+    },
+    "approved_by": "Eval Harness (automated)",
+    "filed_at": "2026-10-02T06:32:30+00:00"
+  }
+]

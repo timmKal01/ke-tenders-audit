@@ -10,3 +10,4 @@ logs/*
 !logs/.gitkeep
 *.sqlite
 *.sqlite-*
+evals/*.out

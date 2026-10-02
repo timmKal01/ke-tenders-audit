@@ -1,0 +1,16 @@
+{
+  "title": "Kilifi County threshold check",
+  "question": "Review Kilifi County Government's awards.",
+  "case_id": "eval-t01-threshold-r1-e25a",
+  "model": "qwen/qwen3.8-27b",
+  "ran_at": "2026-10-02T06:32:16.341+00:00",
+  "recorded_at": "2026-10-02T06:35:45+00:00",
+  "reviewers": [
+    "Eval Harness (automated)"
+  ],
+  "llm_calls": 7,
+  "tool_calls": 7,
+  "tokens_in": 19113,
+  "tokens_out": 1571,
+  "cost_usd": 0.021575
+}
