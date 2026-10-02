@@ -8,7 +8,7 @@ Built for the African Agentic AI Design Challenge, Governance track (The Bid Box
 theme **Value for money**.
 
 ```bash
-pip install -e . && streamlit run app.py
+pip install -r requirements.txt && streamlit run app.py
 ```
 
 (Python 3.12. Put a model key in `.env` first: see [Setup](#setup).)
@@ -76,7 +76,7 @@ Requirements: Python 3.12, Node.js 18+ (for the borrowed Filesystem MCP server, 
 2. Install and start:
 
 ```bash
-pip install -e . && streamlit run app.py
+pip install -r requirements.txt && streamlit run app.py
 ```
 
 The cleaned data ships in `data/clean/releases.jsonl`, so no download is needed. To rebuild it from a

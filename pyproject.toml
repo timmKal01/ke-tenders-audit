@@ -5,11 +5,11 @@ description = "Agentic AI that prepares a sourced review file on Kenyan public p
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
-  "mcp>=1.30",
+  "mcp==1.30.0",
   "langgraph>=1.2",
   "langgraph-checkpoint-sqlite>=2.0",
   "aiosqlite",
-  "langchain-mcp-adapters>=0.3",
+  "langchain-mcp-adapters==0.3.2",
   "langchain-openai>=1.6",
   "duckdb>=1.5",
   "rapidfuzz>=3.14",
