@@ -90,9 +90,9 @@ def show_facts(ocid: str, claim: str):
     amounts = ", ".join(f"KES {a:,.0f}" if a else "KES 0 (data gap)" for a in facts["amounts_kes"]) or "none"
     st.markdown(f"**Record says:** \"{facts['title']}\" · winner {', '.join(facts['winners']) or 'none'} · amount {amounts} · "
                 f"{facts['bidders']} bidder(s) listed · method {facts['method']} · buyer {facts['buyer']}")
-    wrong = checks.suppliers_mentioned(con, claim) - facts["_keys"]
+    wrong = checks.wrong_suppliers(con, claim, facts["_keys"])
     if wrong:
-        st.error(f"Mismatch: the flag names {', '.join(sorted(wrong))}, who is not a bidder or winner on this record.")
+        st.error(f"Mismatch: the flag names {', '.join(wrong)}, who is not a bidder or winner on this record.")
 
 
 def show_record(ocid: str):

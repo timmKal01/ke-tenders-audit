@@ -85,10 +85,10 @@ def file_flag(case_id: str, ocid: str, flag_type: str, finding: str, evidence: s
         if ocid in _known_ocids():
             con = get_connection()
             record = checks.record_facts(con, ocid)
-            wrong = checks.suppliers_mentioned(con, f"{finding} {evidence}") - record["_keys"]
+            wrong = checks.wrong_suppliers(con, f"{finding} {evidence}", record["_keys"])
             if wrong:
                 raise cases.CaseError(
-                    f"The flag names {sorted(wrong)}, but on this ocid the winners are {record['winners']} "
+                    f"The flag names {wrong}, but on this ocid the winners are {record['winners']} "
                     f"and {record['bidders']} bidder(s) are listed. Check which record you mean.")
             record = {k: v for k, v in record.items() if not k.startswith("_")}
         return _out(cases.file_flag(case_id, ocid, flag_type, finding, evidence, approved_by, _known_ocids(), record))

@@ -190,6 +190,15 @@ def record_facts(con, ocid: str) -> dict:
     }
 
 
+def wrong_suppliers(con, text: str, record_keys: set[str]) -> list[str]:
+    """Companies named in the text that are not bidders or winners on the record.
+
+    Compares distinctive names, so 'PETLICO AGENCIES' and 'PETLICO AGENCIES LTD' count as one company.
+    """
+    on_record = {core_name(k) for k in record_keys}
+    return sorted({core_name(k) for k in suppliers_mentioned(con, text)} - on_record)
+
+
 def suppliers_mentioned(con, text: str) -> set[str]:
     """Known supplier companies whose distinctive name appears in the text."""
     normalised = f" {supplier_key(text)} "

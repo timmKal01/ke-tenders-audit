@@ -166,3 +166,13 @@ def test_price_outlier_gets_its_own_row():
     server.draft_report(case_id, "Review", "One price outlier.", "Jane Wanjiku")
     text = (cases.CASES_DIR / case_id / "report.md").read_text(encoding="utf-8")
     assert "| price outlier (other checks) | n/a | 1 |" in text
+
+
+def test_same_company_spelt_with_and_without_ltd_is_not_a_mismatch():
+    """Live demo: 'PETLICO AGENCIES' (the winner) was flagged as a mismatch against 'PETLICO AGENCIES LTD'."""
+    from ke_tenders_audit import server
+    out = json.loads(server.file_flag(
+        f"test-{uuid.uuid4().hex[:8]}", "ocds-5whusi-304735-PCKTTI-140", "price_outlier",
+        "Award amount is a statistical outlier versus comparable training practical items awards.",
+        "Awarded 177,000 KES to PETLICO AGENCIES; median of 48 comparables is 36,435 KES.", "Jane Wanjiku"))
+    assert out["status"] == "filed", out
