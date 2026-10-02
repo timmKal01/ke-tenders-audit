@@ -1,0 +1,9 @@
+.venv
+.env
+.git
+data/raw
+cases/*
+logs/*
+evals/results
+evals/evidence
+**/__pycache__

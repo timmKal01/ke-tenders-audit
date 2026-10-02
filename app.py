@@ -110,6 +110,21 @@ def live_available() -> bool:
     return os.getenv("KTA_ALLOW_LIVE", "1") != "0" and ("localhost" in base or (key and "PASTE" not in key))
 
 
+def live_runs_today() -> int:
+    """Live reviews started today on this server (eval and test runs excluded)."""
+    from datetime import datetime, timezone
+    from ke_tenders_audit.audit_log import LOG_DIR
+    today = datetime.now(timezone.utc).date().isoformat()
+    count = 0
+    for log in LOG_DIR.glob("*.jsonl"):
+        if log.name.startswith(("eval-", "test-")):
+            continue
+        first = log.open(encoding="utf-8").readline()
+        if '"run_started"' in first and first[8:18] == today:
+            count += 1
+    return count
+
+
 def replay_view():
     recs = recordings.list_recordings()
     st.title("Ke-Tenders Audit")
@@ -180,7 +195,12 @@ if ss.thread_id is None:
     cols = st.columns(len(EXAMPLES))
     for col, ex in zip(cols, EXAMPLES):
         col.caption(ex)
-    if st.button("Start review", type="primary", disabled=not reviewer.strip()):
+    limit = int(os.getenv("KTA_LIVE_DAILY_LIMIT", "0"))  # 0 means no cap (local use)
+    capped = bool(limit) and live_runs_today() >= limit
+    if limit:
+        st.caption(f"This public demo allows {limit} live reviews a day on a free model tier "
+                   f"({max(0, limit - live_runs_today())} left today). Recorded runs are always available.")
+    if st.button("Start review", type="primary", disabled=not reviewer.strip() or capped):
         ss.thread_id = f"{case_id}-{uuid.uuid4().hex[:6]}"
         ss.case_id = case_id
         with st.spinner("Planning and running checks..."):
