@@ -134,8 +134,11 @@ def ungrounded_ocid(call: dict, messages: list) -> bool:
 
 def mcp_connections() -> dict:
     npx = shutil.which("npx")
+    # PYTHONPATH lets the server start even when the package is not pip-installed (e.g. on a hosted Space).
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(ROOT / "src"), os.getenv("PYTHONPATH")]))}
     connections = {
-        "audit": {"transport": "stdio", "command": sys.executable, "args": ["-m", "ke_tenders_audit.server"]},
+        "audit": {"transport": "stdio", "command": sys.executable, "args": ["-m", "ke_tenders_audit.server"],
+                  "env": env},
     }
     if npx:
         CASES_DIR.mkdir(exist_ok=True)

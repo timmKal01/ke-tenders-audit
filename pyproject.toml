@@ -16,6 +16,7 @@ dependencies = [
   "streamlit>=1.64",
   "python-dotenv",
   "pytz",
+  "pyarrow",
 ]
 
 [project.optional-dependencies]

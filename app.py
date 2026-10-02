@@ -11,9 +11,14 @@ import re
 import os
 import uuid
 
+import sys
+from pathlib import Path
+
 import streamlit as st
 
-from ke_tenders_audit import agent
+sys.path.insert(0, str(Path(__file__).parent / "src"))  # runs without pip install, e.g. on a hosted Space
+
+from ke_tenders_audit import agent  # noqa: E402
 from ke_tenders_audit.audit_log import AuditLog
 from ke_tenders_audit.cases import CASES_DIR
 from ke_tenders_audit import checks, recordings

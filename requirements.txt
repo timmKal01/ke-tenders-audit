@@ -1,0 +1,12 @@
+mcp>=1.30
+langgraph>=1.2
+langgraph-checkpoint-sqlite>=2.0
+aiosqlite
+langchain-mcp-adapters>=0.3
+langchain-openai>=1.6
+duckdb>=1.5
+rapidfuzz>=3.14
+streamlit>=1.64
+python-dotenv
+pytz
+pyarrow
