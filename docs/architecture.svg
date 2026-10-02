@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#C62828"/>
+    </marker>
+    <style>
+      .t{font-size:16px;font-weight:700;fill:#111}
+      .s{font-size:13px;fill:#333}
+      .m{font-size:13px;fill:#222;font-family:Consolas, monospace}
+      .l{font-size:12px;fill:#444;font-style:italic}
+      .built{fill:#FDEBD8;stroke:#E07B16;stroke-width:2}
+      .borrow{fill:#DCE8F7;stroke:#2F5D9E;stroke-width:2}
+      .data{fill:#EFEFEF;stroke:#777;stroke-width:2}
+      .human{fill:#DFF2E1;stroke:#2E7D32;stroke-width:2}
+      .gate{fill:#FDE3E3;stroke:#C62828;stroke-width:2;stroke-dasharray:6 4}
+      .ln{stroke:#333;stroke-width:1.8;fill:none}
+      .lr{stroke:#C62828;stroke-width:2;fill:none;stroke-dasharray:6 4}
+    </style>
+  </defs>
+  <rect width="1600" height="1000" fill="#fff"/>
+  <text x="30" y="45" font-size="26" font-weight="700" fill="#0B1F3A">Ke-Tenders Audit: agent and MCP architecture</text>
+  <text x="30" y="72" class="s">Governance track · The Bid Box Challenge · The agent prepares a sourced file. A named human approves. The committee decides.</text>
+
+  <!-- Column 1: humans -->
+  <rect x="30" y="110" width="290" height="80" rx="10" class="human"/>
+  <text x="175" y="143" text-anchor="middle" class="t">Procurement officer / auditor</text>
+  <text x="175" y="166" text-anchor="middle" class="s">named human reviewer</text>
+
+  <rect x="30" y="250" width="290" height="90" rx="10" class="built"/>
+  <text x="175" y="282" text-anchor="middle" class="t">Review UI (Streamlit)</text>
+  <text x="175" y="305" text-anchor="middle" class="s">ask a question · inspect sources</text>
+  <text x="175" y="324" text-anchor="middle" class="s">approve / request changes / reject</text>
+
+  <rect x="30" y="820" width="290" height="100" rx="10" class="human"/>
+  <text x="175" y="852" text-anchor="middle" class="t">Evaluation committee</text>
+  <text x="175" y="875" text-anchor="middle" class="s">makes the award decision</text>
+  <text x="175" y="896" text-anchor="middle" class="s">(outside the system, by law)</text>
+
+  <!-- Column 2: agent -->
+  <rect x="370" y="100" width="520" height="560" rx="14" fill="#FFF8F1" stroke="#E07B16" stroke-width="2.5"/>
+  <text x="630" y="128" text-anchor="middle" class="t">LangGraph agent (open-source orchestration)</text>
+
+  <rect x="400" y="150" width="220" height="60" rx="8" class="built"/>
+  <text x="510" y="176" text-anchor="middle" class="t">1. Plan</text>
+  <text x="510" y="197" text-anchor="middle" class="s">break question into checks</text>
+
+  <rect x="400" y="240" width="220" height="60" rx="8" class="built"/>
+  <text x="510" y="266" text-anchor="middle" class="t">2. Act</text>
+  <text x="510" y="287" text-anchor="middle" class="s">call MCP tools</text>
+
+  <rect x="400" y="330" width="220" height="60" rx="8" class="built"/>
+  <text x="510" y="356" text-anchor="middle" class="t">3. Verify</text>
+  <text x="510" y="377" text-anchor="middle" class="s">source cited? data usable?</text>
+
+  <rect x="400" y="420" width="220" height="60" rx="8" class="gate"/>
+  <text x="510" y="446" text-anchor="middle" class="t">4. Human gate</text>
+  <text x="510" y="467" text-anchor="middle" class="s">grounding check, then interrupt()</text>
+
+  <rect x="400" y="510" width="220" height="60" rx="8" class="built"/>
+  <text x="510" y="536" text-anchor="middle" class="t">5. Report</text>
+  <text x="510" y="557" text-anchor="middle" class="s">sourced committee file, then stop</text>
+
+  <path d="M510,210 V238" class="ln" marker-end="url(#a)"/>
+  <path d="M510,300 V328" class="ln" marker-end="url(#a)"/>
+  <path d="M510,390 V418" class="ln" marker-end="url(#a)"/>
+  <path d="M510,480 V508" class="ln" marker-end="url(#a)"/>
+  <path d="M400,355 C378,345 378,282 398,272" class="ln" marker-end="url(#a)"/>
+  <text x="522" y="320" class="l">retry / re-plan on bad data</text>
+
+  <rect x="650" y="235" width="215" height="75" rx="8" class="borrow"/>
+  <text x="757" y="263" text-anchor="middle" class="t">MCP client</text>
+  <text x="757" y="285" text-anchor="middle" class="m">langchain-mcp-adapters</text>
+
+  <rect x="650" y="345" width="215" height="75" rx="8" class="borrow"/>
+  <text x="757" y="373" text-anchor="middle" class="t">Memory</text>
+  <text x="757" y="395" text-anchor="middle" class="s">SQLite checkpointer (session,</text>
+  <text x="757" y="411" text-anchor="middle" class="s">resume after approval)</text>
+
+  <rect x="650" y="455" width="215" height="75" rx="8" class="built"/>
+  <text x="757" y="483" text-anchor="middle" class="t">Audit logger</text>
+  <text x="757" y="505" text-anchor="middle" class="s">wraps every tool call</text>
+
+  <path d="M620,270 H648" class="ln" marker-end="url(#a)" marker-start="url(#a)"/>
+
+  <!-- LLM -->
+  <rect x="370" y="700" width="520" height="95" rx="10" class="borrow"/>
+  <text x="630" y="730" text-anchor="middle" class="t">LLM: open-weights Qwen (Groq or local Ollama)</text>
+  <text x="630" y="753" text-anchor="middle" class="s">Qwen3.8-27B on Groq · Qwen3 4B locally keeps data in-country</text>
+  <text x="630" y="774" text-anchor="middle" class="s">tokens and cost logged per call · requests kept under ~7k tokens</text>
+  <path d="M630,662 V698" class="ln" marker-end="url(#a)" marker-start="url(#a)"/>
+  <text x="640" y="685" class="l">reasoning / tool choice</text>
+
+  <!-- Column 3: MCP servers -->
+  <rect x="940" y="100" width="320" height="335" rx="12" class="built"/>
+  <text x="1100" y="128" text-anchor="middle" class="t">ke-tenders-audit-mcp (BUILT)</text>
+  <text x="1100" y="148" text-anchor="middle" class="s">Python MCP SDK · stdio</text>
+  <text x="960" y="178" class="s" font-weight="700">Tools</text>
+  <text x="960" y="200" class="m">search_awards</text><text x="1240" y="200" text-anchor="end" class="m">read</text>
+  <text x="960" y="222" class="m">price_benchmark</text><text x="1240" y="222" text-anchor="end" class="m">read</text>
+  <text x="960" y="244" class="m">supplier_profile</text><text x="1240" y="244" text-anchor="end" class="m">read</text>
+  <text x="960" y="266" class="m">check_red_flags</text><text x="1240" y="266" text-anchor="end" class="m">read</text>
+  <text x="960" y="288" class="m" fill="#C62828">file_flag</text><text x="1240" y="288" text-anchor="end" class="m" fill="#C62828">WRITE·gated</text>
+  <text x="960" y="310" class="m" fill="#C62828">draft_report</text><text x="1240" y="310" text-anchor="end" class="m" fill="#C62828">WRITE·gated</text>
+  <text x="960" y="342" class="s" font-weight="700">Resources</text>
+  <text x="960" y="364" class="m">ocds://release/{ocid}</text>
+  <text x="960" y="386" class="m">ocds://data-quality-notes</text>
+  <text x="960" y="415" class="l">flags checked against the record: real ocid, right supplier</text>
+
+  <rect x="940" y="470" width="320" height="120" rx="12" class="borrow"/>
+  <text x="1100" y="500" text-anchor="middle" class="t">Filesystem MCP server (BORROWED)</text>
+  <text x="1100" y="523" text-anchor="middle" class="s">official modelcontextprotocol server</text>
+  <text x="1100" y="545" text-anchor="middle" class="s">scoped to the case-file folder only</text>
+  <text x="1100" y="567" text-anchor="middle" class="l">tested and sandboxed, no need to rewrite</text>
+
+  <path d="M865,262 H938" class="ln" marker-end="url(#a)"/>
+  <path d="M865,290 C905,290 900,530 938,530" class="ln" marker-end="url(#a)"/>
+  <text x="902" y="252" text-anchor="middle" class="l">MCP</text>
+
+  <!-- Column 4: data -->
+  <rect x="1310" y="100" width="260" height="80" rx="10" class="data"/>
+  <text x="1440" y="130" text-anchor="middle" class="t">PPRA OCDS API</text>
+  <text x="1440" y="152" text-anchor="middle" class="m">tenders.go.ke/api/ocds</text>
+  <text x="1440" y="170" text-anchor="middle" class="s">external · cached download</text>
+
+  <rect x="1310" y="215" width="260" height="100" rx="10" class="built"/>
+  <text x="1440" y="243" text-anchor="middle" class="t">Ingest &amp; clean</text>
+  <text x="1440" y="265" text-anchor="middle" class="s">KES 0 values, impossible dates,</text>
+  <text x="1440" y="283" text-anchor="middle" class="s">supplier name matching,</text>
+  <text x="1440" y="301" text-anchor="middle" class="s">strip personal contact details</text>
+
+  <rect x="1310" y="350" width="260" height="80" rx="10" class="data"/>
+  <text x="1440" y="380" text-anchor="middle" class="t">DuckDB awards store</text>
+  <text x="1440" y="402" text-anchor="middle" class="s">tenders · awards · bidders</text>
+
+  <rect x="1310" y="475" width="260" height="95" rx="10" class="data"/>
+  <text x="1440" y="505" text-anchor="middle" class="t">Case file</text>
+  <text x="1440" y="527" text-anchor="middle" class="m">flags.json · report.md</text>
+  <text x="1440" y="549" text-anchor="middle" class="s">approved findings only</text>
+
+  <rect x="1310" y="610" width="260" height="95" rx="10" class="data"/>
+  <text x="1440" y="640" text-anchor="middle" class="t">Audit log (JSONL)</text>
+  <text x="1440" y="662" text-anchor="middle" class="s">inputs, outputs, timestamp,</text>
+  <text x="1440" y="680" text-anchor="middle" class="s">approver name, cost</text>
+
+  <path d="M1440,180 V213" class="ln" marker-end="url(#a)"/>
+  <path d="M1440,315 V348" class="ln" marker-end="url(#a)"/>
+  <path d="M1260,390 H1308" class="ln" marker-end="url(#a)" marker-start="url(#a)"/>
+  <text x="1284" y="380" text-anchor="middle" class="l">SQL</text>
+  <path d="M1260,525 H1308" class="ln" marker-end="url(#a)"/>
+  <path d="M865,500 H910 V655 H1308" class="ln" marker-end="url(#a)"/>
+
+  <!-- Human loop -->
+  <path d="M175,190 V248" class="ln" marker-end="url(#a)" marker-start="url(#a)"/>
+  <path d="M320,275 C360,275 360,180 398,180" class="ln" marker-end="url(#a)"/>
+  <text x="225" y="232" class="l">question</text>
+  <path d="M398,450 C350,450 360,330 322,320" class="lr" marker-end="url(#r)" marker-start="url(#r)"/>
+  <text x="235" y="400" class="l" fill="#C62828">approve /</text>
+  <text x="235" y="416" class="l" fill="#C62828">reject (named)</text>
+  <path d="M400,540 H175 V818" class="ln" marker-end="url(#a)"/>
+  <text x="185" y="680" class="l">sourced report, then the agent stops</text>
+
+  <!-- Legend -->
+  <rect x="940" y="760" width="630" height="200" rx="10" fill="#fff" stroke="#bbb"/>
+  <text x="960" y="790" class="t">Legend</text>
+  <rect x="960" y="805" width="28" height="18" rx="3" class="built"/><text x="1000" y="819" class="s">built by us (new work)</text>
+  <rect x="1240" y="805" width="28" height="18" rx="3" class="borrow"/><text x="1280" y="819" class="s">borrowed open source</text>
+  <rect x="960" y="838" width="28" height="18" rx="3" class="data"/><text x="1000" y="852" class="s">data / external API</text>
+  <rect x="1240" y="838" width="28" height="18" rx="3" class="human"/><text x="1280" y="852" class="s">people</text>
+  <rect x="960" y="871" width="28" height="18" rx="3" class="gate"/><text x="1000" y="885" class="s">human-in-the-loop gate: nothing is written without a named approver</text>
+  <text x="960" y="922" class="s">Flow: question → plan → tool calls via MCP → verify (retry on bad data) → human gate</text>
+  <text x="960" y="942" class="s">→ approved flags written to case file → sourced report → committee decides</text>
+</svg>
