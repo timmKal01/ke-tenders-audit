@@ -10,14 +10,13 @@ import json
 import re
 import os
 import uuid
-from urllib.parse import quote
 
 import streamlit as st
 
 from ke_tenders_audit import agent
 from ke_tenders_audit.audit_log import AuditLog
 from ke_tenders_audit.cases import CASES_DIR
-from ke_tenders_audit import checks
+from ke_tenders_audit import checks, recordings
 from ke_tenders_audit.data import get_connection, releases_by_ocid
 
 st.set_page_config(page_title="Ke-Tenders Audit", page_icon="⚖️", layout="wide")
@@ -58,8 +57,8 @@ def describe_error(e: BaseException) -> str:
     return f"{type(e).__name__}: {text}"
 
 
-def tool_timeline(thread_id: str):
-    for e in AuditLog(thread_id).entries():
+def tool_timeline(entries: list[dict]):
+    for e in entries:
         if e["kind"] == "tool_call":
             label = f"🔧 `{e['server']}.{e['tool']}` ({e['seconds']}s)"
             with st.expander(label):
@@ -99,6 +98,61 @@ def show_record(ocid: str):
     else:
         st.error(f"ocid {ocid} not found in the data")
 
+
+def live_available() -> bool:
+    base = os.getenv("KTA_LLM_BASE_URL", "http://localhost:11434/v1")
+    key = os.getenv("KTA_LLM_API_KEY", "")
+    return os.getenv("KTA_ALLOW_LIVE", "1") != "0" and ("localhost" in base or (key and "PASTE" not in key))
+
+
+def replay_view():
+    recs = recordings.list_recordings()
+    st.title("Ke-Tenders Audit")
+    if not recs:
+        st.info("No recorded runs yet.")
+        return
+    titles = [r["title"] for r in recs]
+    chosen = st.selectbox("Recorded run", titles)
+    rec = recordings.load(recs[titles.index(chosen)]["folder"])
+    meta = rec["meta"]
+    st.warning(f"**Recorded run, replayed.** Nothing is running now. This is the unedited log of a real run on "
+               f"{meta['ran_at'][:10]} with `{meta['model']}`, approved by {', '.join(meta['reviewers']) or 'no one'}. "
+               f"{meta['llm_calls']} model calls, {meta['tool_calls']} tool calls, "
+               f"{meta['tokens_in']:,} tokens in, cost ${meta['cost_usd']}.")
+    st.markdown(f"**Question:** {meta['question']}")
+    left, right = st.columns([3, 2])
+    with right:
+        st.subheader("Agent activity")
+        plan = next((e["plan"] for e in rec["entries"] if e["kind"] == "plan"), "")
+        if plan:
+            with st.expander("Plan", expanded=True):
+                st.markdown(plan)
+        tool_timeline(rec["entries"])
+    with left:
+        st.subheader("Report")
+        final = next((e["summary"] for e in reversed(rec["entries"]) if e["kind"] == "run_finished"), "")
+        if final:
+            with st.expander("Agent's closing summary"):
+                st.markdown(final)
+        if rec["report"]:
+            st.download_button("Download report.md", rec["report"], file_name=f"{meta['case_id']}-report.md")
+            with st.container(border=True):
+                st.markdown(rec["report"])
+        else:
+            st.info("No report was drafted in this run.")
+
+
+with st.sidebar:
+    modes = ["Live review", "Recorded runs"] if live_available() else ["Recorded runs"]
+    if os.getenv("KTA_DEFAULT_MODE") == "replay":
+        modes.sort(key=lambda m: m != "Recorded runs")
+    mode = st.radio("Mode", modes)
+    if not live_available():
+        st.caption("Live review is off here: no model key is configured.")
+
+if mode == "Recorded runs":
+    replay_view()
+    st.stop()
 
 with st.sidebar:
     st.header("Reviewer")
@@ -151,7 +205,7 @@ with right:
     if result.get("plan"):
         with st.expander("Plan", expanded=True):
             st.markdown(result["plan"])
-    tool_timeline(ss.thread_id)
+    tool_timeline(AuditLog(ss.thread_id).entries())
 
 with left:
     if result["status"] == "needs_approval":

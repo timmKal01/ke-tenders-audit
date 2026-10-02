@@ -172,7 +172,9 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
         started = time.time()
         reply = await llm.ainvoke([SystemMessage(PLAN_PROMPT), HumanMessage(state["question"])])
         log.llm_call("plan", reply, time.time() - started)
-        return {"plan": _strip_thinking(reply.content), "messages": [HumanMessage(state["question"])], "steps": 0}
+        plan_text = _strip_thinking(reply.content)
+        log.event("plan", {"plan": plan_text})
+        return {"plan": plan_text, "messages": [HumanMessage(state["question"])], "steps": 0}
 
     async def agent(state: State):
         started = time.time()
@@ -356,7 +358,8 @@ async def open_agent(thread_id: str, llm=None):
 
 async def start(question: str, case_id: str, thread_id: str, llm=None) -> dict:
     async with open_agent(thread_id, llm) as (graph, log):
-        log.event("run_started", {"question": question, "case_id": case_id})
+        log.event("run_started", {"question": question, "case_id": case_id,
+                                  "model": os.getenv("KTA_LLM_MODEL")})
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 80}
         result = await graph.ainvoke({"question": question, "case_id": case_id}, config)
         return _outcome(result, log)
