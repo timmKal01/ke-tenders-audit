@@ -12,9 +12,11 @@ never by the model.
 
 import json
 import os
+import re
 import shutil
 import sys
 import time
+from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, TypedDict
@@ -39,6 +41,7 @@ CHECKPOINTS = ROOT / "logs" / "checkpoints.sqlite"
 WRITE_TOOLS = {"file_flag", "draft_report"}
 BORROWED_READ_TOOLS = {"read_text_file", "list_directory"}
 MAX_AGENT_STEPS = 16
+MAX_REFUSALS = 3  # same tool refused this many times ends the run
 
 load_dotenv(ROOT / ".env")
 
@@ -68,7 +71,9 @@ How to work:
 - When you find a pattern worth the committee's attention, call file_flag with case_id "{case_id}",
   the ocid, a flag_type, a one-sentence finding and the evidence numbers. Leave approved_by empty:
   a human reviewer fills it in.
-- File at most 4 flags, the most important ones. When done, call draft_report once.
+- File at most 4 flags, the most important ones. When done, call draft_report once, with a summary
+  of 2 to 4 short sentences, under 400 characters.
+- Only file a price flag when price_benchmark marked that award as an outlier.
 - If the reviewer rejects a write, never propose it again. If they request changes, revise it using
   their note and propose it once more.
 - Then reply with a short plain summary of what you checked, what you flagged and what you could not check.
@@ -192,6 +197,9 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
             return END
         if state["steps"] >= MAX_AGENT_STEPS:
             return "stop"
+        refused = _refusals(state["messages"])
+        if any(refused[c["name"]] >= MAX_REFUSALS for c in calls):
+            return "stop"  # the model keeps retrying a refused call: end the run instead of looping
         return "gate" if any(c["name"] in WRITE_TOOLS for c in calls) else "tools"
 
     def gate(state: State):
@@ -282,10 +290,17 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
         log.event("verify", {"problems": problems})
         note = ("Verifier: " + "; ".join(problems) +
                 ". Read those results, then adjust your next step or state the limitation. Do not guess.")
+        for tool, n in _refusals(state["messages"]).items():
+            if n >= MAX_REFUSALS - 1:
+                note += f" {tool} has been refused {n} times. Do not call it again; finish with your summary."
         return {"messages": [HumanMessage(note)]}
 
     def stop(state: State):
-        return {"messages": [AIMessage(content="Stopped: step limit reached. The case file holds only approved flags so far.")]}
+        refused = [t for t, n in _refusals(state["messages"]).items() if n >= MAX_REFUSALS]
+        reason = (f"{', '.join(refused)} was refused {MAX_REFUSALS} times" if refused
+                  else "step limit reached")
+        log.event("stopped", {"reason": reason})
+        return {"messages": [AIMessage(content=f"Stopped: {reason}. The case file holds only approved flags so far.")]}
 
     graph = StateGraph(State)
     graph.add_node("plan", plan)
@@ -309,6 +324,12 @@ def write_key(call: dict) -> str:
     if call["name"] == "file_flag":
         return f"file_flag:{call['args'].get('ocid')}:{call['args'].get('flag_type')}"
     return call["name"]
+
+
+def _refusals(messages: list) -> Counter:
+    """How many times each tool has been refused in this run."""
+    return Counter(m.name for m in messages if isinstance(m, ToolMessage)
+                   and re.search(r'"status":\s*"refused"', str(m.content)))
 
 
 def _log_auto(log: AuditLog, auto: dict) -> None:

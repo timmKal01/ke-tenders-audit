@@ -138,3 +138,17 @@ def test_request_changes_lets_the_agent_revise():
     final = asyncio.run(agent.resume(thread, {"reviewer": "Jane Wanjiku", "approved": ["q2"]}, llm=llm))
     assert final["status"] == "done"
     assert load_flags(case_id)[0]["finding"].startswith("The award is KES 6.75 below")
+
+
+def test_repeated_refusals_end_the_run_instead_of_looping():
+    """Eval T05/T06: draft_report was refused 12 times in a row until the step limit."""
+    case_id = f"test-{uuid.uuid4().hex[:8]}"
+    thread = f"test-{case_id}"
+    bad = {"case_id": case_id, "title": "Review", "summary": "No flags filed so far"}   # no flags: always refused
+    llm = ScriptedLLM(script=["1. Draft the report."] + [call("draft_report", bad, f"r{i}") for i in range(6)])
+    result = asyncio.run(agent.start("Draft a report", case_id, thread, llm=llm))
+    while result["status"] == "needs_approval":
+        result = asyncio.run(agent.resume(thread, {"reviewer": "Jane Wanjiku",
+                                                   "approved": [p["id"] for p in result["proposals"]]}, llm=llm))
+    assert "refused 3 times" in result["summary"]
+    assert llm.position <= 5                      # plan + 3 refused attempts + the one that triggered the stop

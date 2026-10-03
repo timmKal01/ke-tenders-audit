@@ -245,6 +245,10 @@ with left:
                     st.markdown(f"- Type: `{args.get('flag_type')}`\n- Finding: {args.get('finding')}\n"
                                 f"- Evidence: {args.get('evidence')}\n- Source: `{args.get('ocid')}`")
                     show_facts(args.get("ocid", ""), f"{args.get('finding', '')} {args.get('evidence', '')}")
+                    price_problem = checks.price_flag_problem(get_connection(), args.get("ocid", ""),
+                                                              args.get("flag_type", ""))
+                    if price_problem:
+                        st.error(f"Will be refused: {price_problem}")
                     show_record(args.get("ocid", ""))
                 else:
                     st.markdown(f"- Title: {args.get('title')}\n- Summary: {args.get('summary')}")

@@ -155,7 +155,30 @@ def test_cut_off_summary_is_refused():
                      "One bidder.", "IMOTH INSURANCE was the only bidder.", "Jane Wanjiku")
     out = json.loads(server.draft_report(case_id, "Review", "The insurance award has no comparables, so neither",
                                          "Jane Wanjiku"))
-    assert out["status"] == "refused" and "cut off" in out["reason"]
+    assert out["status"] == "refused" and "no complete sentence" in out["reason"]
+
+
+def test_summary_cut_at_the_provider_limit_is_trimmed_not_refused():
+    """Eval T05/T06: summaries were cut at about 496 characters; refusing them made the model loop."""
+    from ke_tenders_audit import server
+    case_id = f"test-{uuid.uuid4().hex[:8]}"
+    server.file_flag(case_id, "ocds-5whusi-302526-PCKTTI-172", "single_bidder",
+                     "One bidder.", "IMOTH INSURANCE was the only bidder.", "Jane Wanjiku")
+    out = json.loads(server.draft_report(
+        case_id, "Review", "One single-bidder award was found. The committee should request the correct", "Jane Wanjiku"))
+    assert out["status"] == "drafted" and "trimmed" in out["note"]
+    text = (cases.CASES_DIR / case_id / "report.md").read_text(encoding="utf-8")
+    assert "One single-bidder award was found." in text and "request the correct" not in text
+
+
+def test_price_flag_needs_a_benchmark_outlier():
+    """Eval T06: the model flagged an award at 3.05x the median that the benchmark did not mark as an outlier."""
+    from ke_tenders_audit import server
+    out = json.loads(server.file_flag(
+        f"test-{uuid.uuid4().hex[:8]}", "ocds-5whusi-291620-JUD/MIL/BRAND/159/2025-2026", "price_outlier",
+        "Branded polo shirts cost about three times the median.", "MkLegacy Limited KES 300,000, ratio 3.05.",
+        "Jane Wanjiku"))
+    assert out["status"] == "refused" and "did not mark this award as an outlier" in out["reason"]
 
 
 def test_price_outlier_gets_its_own_row():

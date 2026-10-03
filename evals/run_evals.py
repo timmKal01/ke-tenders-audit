@@ -1,7 +1,7 @@
 """Run the eval tasks against the configured model and grade each run.
 
-    python evals/run_evals.py --runs 2
-    python evals/run_evals.py --runs 3 --tasks T01_threshold T06_price_outlier
+    python evals/run_evals.py --round 2 --runs 2
+    python evals/run_evals.py --round 2 --runs 3 --tasks T01_threshold T06_price_outlier
 
 Results are appended to evals/results/<model>.jsonl, one line per run.
 Already-finished runs are skipped, so after a daily rate limit you simply
@@ -87,10 +87,10 @@ def done_runs(path: Path) -> set[tuple[str, int]]:
     return {(r["task"], r["run"]) for r in rows if r["status"] in ("graded", "error")}
 
 
-async def main(runs: int, only: list[str]) -> None:
+async def main(runs: int, only: list[str], round_no: int) -> None:
     model = os.getenv("KTA_LLM_MODEL", "unknown")
     RESULTS_DIR.mkdir(exist_ok=True)
-    path = RESULTS_DIR / (re.sub(r"[^a-zA-Z0-9.]+", "_", model) + ".jsonl")
+    path = RESULTS_DIR / (re.sub(r"[^a-zA-Z0-9.]+", "_", model) + f"-round{round_no}.jsonl")
     finished = done_runs(path)
     todo = [(t, n) for n in range(1, runs + 1) for t in TASKS
             if (not only or t["id"] in only) and (t["id"], n) not in finished]
@@ -129,5 +129,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=2)
     parser.add_argument("--tasks", nargs="*", default=[])
+    parser.add_argument("--round", type=int, default=2, help="results go to <model>-round<N>.jsonl")
     args = parser.parse_args()
-    asyncio.run(main(args.runs, args.tasks))
+    asyncio.run(main(args.runs, args.tasks, args.round))

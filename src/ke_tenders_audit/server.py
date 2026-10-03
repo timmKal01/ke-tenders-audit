@@ -90,6 +90,9 @@ def file_flag(case_id: str, ocid: str, flag_type: str, finding: str, evidence: s
                 raise cases.CaseError(
                     f"The flag names {wrong}, but on this ocid the winners are {record['winners']} "
                     f"and {record['bidders']} bidder(s) are listed. Check which record you mean.")
+            not_outlier = checks.price_flag_problem(con, ocid, flag_type)
+            if not_outlier:
+                raise cases.CaseError(not_outlier)
             record = {k: v for k, v in record.items() if not k.startswith("_")}
         return _out(cases.file_flag(case_id, ocid, flag_type, finding, evidence, approved_by, _known_ocids(), record))
     except cases.CaseError as e:

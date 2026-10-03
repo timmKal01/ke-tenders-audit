@@ -89,6 +89,21 @@ def _record_line(r: dict) -> str:
             f"amount(s) {amounts or 'none'}; bidders listed {r.get('bidders')}")
 
 
+def complete_sentences(summary: str) -> tuple[str, bool]:
+    """Return the summary ending on a full sentence, and whether it had to be trimmed.
+
+    The model provider sometimes cuts long tool arguments at about 500 characters. Refusing
+    such a summary made the model retry the same length in a loop, so it is trimmed instead.
+    """
+    text = (summary or "").rstrip()
+    if text.endswith((".", "!", "?", ")")):
+        return text, False
+    ends = [m.end() for m in re.finditer(r"[.!?](?=\s)", text)]
+    if ends and ends[-1] >= 30:
+        return text[:ends[-1]], True
+    raise CaseError("The summary has no complete sentence. Write 2 to 4 short sentences, under 400 characters.")
+
+
 def draft_report(case_id: str, title: str, summary: str, approved_by: str,
                  totals: list[dict] | None = None) -> dict:
     approver = _check_approver(approved_by)
@@ -97,8 +112,7 @@ def draft_report(case_id: str, title: str, summary: str, approved_by: str,
         raise CaseError("No approved flags in this case yet. File flags before drafting the report.")
     if DECISION_WORDS.search(summary or ""):
         raise CaseError("The summary must not decide the award or declare wrongdoing.")
-    if not (summary or "").rstrip().endswith((".", "!", "?", ")")):
-        raise CaseError("The summary looks cut off: it does not end with a full stop. Rewrite it as complete sentences.")
+    summary, trimmed = complete_sentences(summary)
 
     lines = [
         f"# {plain_text(title)}",
@@ -161,4 +175,7 @@ def draft_report(case_id: str, title: str, summary: str, approved_by: str,
     ]
     path = _case_dir(case_id) / "report.md"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return {"status": "drafted", "case_id": case_id, "path": str(path.relative_to(ROOT)), "findings": len(flags)}
+    result = {"status": "drafted", "case_id": case_id, "path": str(path.relative_to(ROOT)), "findings": len(flags)}
+    if trimmed:
+        result["note"] = "The summary was cut off mid-sentence, so it was trimmed to its last complete sentence."
+    return result

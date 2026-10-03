@@ -190,6 +190,26 @@ def record_facts(con, ocid: str) -> dict:
     }
 
 
+PRICE_FLAG_WORDS = ("price", "outlier", "overpric", "value")
+
+
+def price_flag_problem(con, ocid: str, flag_type: str) -> str | None:
+    """A price flag is only allowed when price_benchmark marks the award as an outlier.
+
+    Eval T06: the model filed a price outlier on an award at 3.05 times the median that the
+    benchmark had marked as within the normal range.
+    """
+    if not any(w in (flag_type or "").lower() for w in PRICE_FLAG_WORDS):
+        return None
+    results = price_benchmark(con, ocid).get("results", [])
+    if any(r.get("outlier") for r in results):
+        return None
+    detail = "; ".join(f"ratio {r['ratio_to_median']}" if "ratio_to_median" in r else r.get("status", "")
+                       for r in results) or "no award found"
+    return (f"price_benchmark did not mark this award as an outlier ({detail}). Only flag prices the "
+            "benchmark marks as outliers. Mention other high ratios in the summary instead.")
+
+
 def wrong_suppliers(con, text: str, record_keys: set[str]) -> list[str]:
     """Companies named in the text that are not bidders or winners on the record.
 
