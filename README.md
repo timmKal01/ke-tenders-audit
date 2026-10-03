@@ -7,6 +7,9 @@ winner and never declares wrongdoing. Every write needs a named human's approval
 Built for the African Agentic AI Design Challenge, Governance track (The Bid Box Challenge),
 theme **Value for money**.
 
+**Live demo:** https://ke-tenders-audit-bxxfc4gmxjc9mpuuvkzypz.streamlit.app/
+(opens on recorded real runs; switch to "Live review" in the sidebar for up to 3 live reviews a day on a free model tier)
+
 ```bash
 pip install -r requirements.txt && streamlit run app.py
 ```
