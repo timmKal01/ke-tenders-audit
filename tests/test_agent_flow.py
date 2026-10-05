@@ -152,3 +152,22 @@ def test_repeated_refusals_end_the_run_instead_of_looping():
                                                    "approved": [p["id"] for p in result["proposals"]]}, llm=llm))
     assert "refused 3 times" in result["summary"]
     assert llm.position <= 5                      # plan + 3 refused attempts + the one that triggered the stop
+
+
+def test_request_too_large_is_retried_with_a_smaller_history():
+    """Eval round 2, T06: one request was 7,328 tokens against a 7,000 limit and the run crashed."""
+    case_id = f"test-{uuid.uuid4().hex[:8]}"
+    thread = f"test-{case_id}"
+    sizes = []
+
+    def too_large_once(messages):
+        sizes.append(sum(len(str(m.content)) for m in messages))
+        if len(sizes) == 1:
+            raise RuntimeError("Error code: 413 - Request too large for model on input tokens per minute")
+        return "Checked the buyer. Nothing to flag."
+
+    llm = ScriptedLLM(script=["1. Check the buyer.", call("check_red_flags", {"buyer": "PC Kinyanjui"}, "s1"),
+                              too_large_once, too_large_once])
+    result = asyncio.run(agent.start("Review PC Kinyanjui", case_id, thread, llm=llm))
+    assert result["status"] == "done"
+    assert any(e["kind"] == "request_too_large" for e in AuditLog(thread).entries())

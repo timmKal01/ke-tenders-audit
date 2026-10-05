@@ -102,7 +102,7 @@ def make_llm(http_async_client=None):
     )
 
 
-HISTORY_BUDGET_CHARS = int(os.getenv("KTA_HISTORY_BUDGET_CHARS", "12000"))
+HISTORY_BUDGET_CHARS = int(os.getenv("KTA_HISTORY_BUDGET_CHARS", "10000"))
 
 
 def _shorten(m: ToolMessage, limit: int) -> ToolMessage:
@@ -120,7 +120,7 @@ def compact_history(messages: list, budget: int = HISTORY_BUDGET_CHARS) -> list:
     Every tool call keeps its answer, so the message order stays valid.
     """
     last_ai = max((i for i, m in enumerate(messages) if isinstance(m, AIMessage)), default=-1)
-    for old_limit, new_limit in ((400, 4000), (150, 2500), (80, 1200)):
+    for old_limit, new_limit in ((400, 4000), (150, 2500), (80, 1200), (40, 600)):
         out = [_shorten(m, old_limit if i < last_ai else new_limit) if isinstance(m, ToolMessage) else m
                for i, m in enumerate(messages)]
         if sum(len(str(m.content)) + len(json.dumps(getattr(m, "tool_calls", []))) for m in out) <= budget:
@@ -187,7 +187,16 @@ def build_graph(llm, tools, log: AuditLog, checkpointer=None):
     async def agent(state: State):
         started = time.time()
         system = SystemMessage(AGENT_PROMPT.format(case_id=state["case_id"], plan=state["plan"]))
-        reply = await llm_with_tools.ainvoke([system, *compact_history(state["messages"])])
+        try:
+            reply = await llm_with_tools.ainvoke([system, *compact_history(state["messages"])])
+        except Exception as e:
+            # Eval T06: a request of 7,328 tokens hit the provider's 7,000 per-minute ceiling.
+            # Shrink the history harder and try once more instead of failing the run.
+            if "413" not in str(e) and "too large" not in str(e).lower():
+                raise
+            log.event("request_too_large", {"error": str(e)[:200]})
+            reply = await llm_with_tools.ainvoke(
+                [system, *compact_history(state["messages"], budget=HISTORY_BUDGET_CHARS // 2)])
         log.llm_call("agent", reply, time.time() - started)
         return {"messages": [reply], "steps": state["steps"] + 1}
 
