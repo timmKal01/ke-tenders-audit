@@ -65,7 +65,7 @@ What the code enforces, not just the prompt:
 
 ![Architecture](docs/architecture.png)
 
-One page: [ARCHITECTURE.md](ARCHITECTURE.md).
+One page: [ARCHITECTURE.md](ARCHITECTURE.md). Project description (about 300 words): [DESCRIPTION.md](DESCRIPTION.md).
 
 ## Setup
 
