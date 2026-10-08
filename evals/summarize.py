@@ -35,7 +35,8 @@ def summarize(rows: list[dict], label: str) -> str:
     lines.append(f"**{passed} of {len(graded)} graded runs passed every check** "
                  f"({passed / len(graded):.0%})." if graded else "No graded runs yet.")
     if errors:
-        lines.append(f" {len(errors)} runs ended in an error and count as failures.")
+        lines.append(f"{len(errors)} more run(s) ended in an error and count as failures, "
+                     f"so {passed} of {len(graded) + len(errors)} runs passed in total.")
     lines += ["", "| Task | Runs | Passed | Same result every run | Input tokens, mean | Cost per run, mean | Seconds, mean |",
               "|---|---|---|---|---|---|---|"]
     for task in TASKS:

@@ -119,7 +119,7 @@ python evals/run_evals.py --runs 2
 | Data | DuckDB in memory, built from cleaned OCDS JSONL; RapidFuzz for name matching |
 | Interface | Streamlit review screen, plus a terminal runner |
 | Logs | Append-only JSONL audit log per run |
-| Tests | pytest (31 tests), plus a graded eval harness |
+| Tests | pytest (36 tests), plus a graded eval harness (see EVALS.md) |
 
 ## Agent architecture
 
